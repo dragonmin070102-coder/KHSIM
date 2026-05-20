@@ -1,0 +1,1468 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KHSIM</title>
+    <link rel="stylesheet" href="./styles.css?v=prototype4-medux1" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="ward" aria-label="1인실 병동">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">Clinical Simulation Suite</p>
+            <h1>KHSIM</h1>
+          </div>
+          <div class="shift">
+            <span>ACS bedside scenario</span>
+            <strong id="score">Score 50</strong>
+          </div>
+        </div>
+
+        <div class="room">
+          <div id="three-container" aria-label="3D 병실 환경"></div>
+          <button type="button" class="hud-visibility-toggle" id="hud-visibility-toggle" aria-pressed="false" aria-label="HUD 클러스터 접기">
+            <span>HUD</span>
+          </button>
+          <div class="interaction-hint" id="interaction-hint">환자와 먼저 대화해보세요.</div>
+          <button type="button" class="hint-card-toggle" data-floating-card-toggle="hint" aria-controls="interaction-hint" aria-label="침상 힌트 접기">Hint</button>
+          <div class="interaction-menu" id="interaction-menu" hidden></div>
+          <div class="patient-conversation" id="patient-conversation" hidden aria-live="polite"></div>
+          <div class="ecg-procedure-overlay" id="ecg-procedure-overlay" hidden aria-live="polite"></div>
+          <div class="notification-layer" id="notification-layer" aria-live="polite" aria-label="Clinical notifications"></div>
+          <div class="physician-contact" id="physician-contact" hidden aria-live="polite"></div>
+          <div class="context-window" id="context-window" hidden role="dialog" aria-modal="false" aria-labelledby="context-window-title">
+            <header>
+              <div>
+                <p class="eyebrow" id="context-window-kicker">Clinical task</p>
+                <h2 id="context-window-title">임상 작업</h2>
+                <span id="context-window-subtitle"></span>
+              </div>
+              <button type="button" id="context-window-close" aria-label="작업 창 닫기">닫기</button>
+            </header>
+            <div class="context-window-body" id="context-window-body"></div>
+          </div>
+          <div class="handoff-overlay" id="handoff-overlay" aria-live="polite">
+            <section class="handoff-card" aria-labelledby="handoff-title">
+              <p class="eyebrow">Night Shift Handoff</p>
+              <h2 id="handoff-title">간호 인계</h2>
+              <div id="handoff-content"></div>
+              <button type="button" id="handoff-continue">EMR 확인</button>
+            </section>
+          </div>
+          <div class="tool-toolbar" id="tool-toolbar" aria-label="Bedside tools">
+            <button type="button" data-tool="stethoscope" aria-pressed="false">
+              <span>ST</span>
+              <strong>청진기</strong>
+            </button>
+            <button type="button" data-tool="pulseOx" aria-pressed="false">
+              <span>SpO₂</span>
+              <strong>Pulse Ox</strong>
+            </button>
+            <button type="button" data-tool="oxygenMask" aria-pressed="false">
+              <span>O2</span>
+              <strong>O2 마스크</strong>
+            </button>
+            <button type="button" data-tool="syringe" aria-pressed="false">
+              <span>Rx</span>
+              <strong>IV 주사기</strong>
+            </button>
+          </div>
+          <div class="monitor" id="monitor">
+            <div class="monitor-screen">
+              <div class="monitor-header">
+                <span class="monitor-label">침상 모니터</span>
+                <span class="monitor-status" id="monitor-status">대기</span>
+              </div>
+              <svg viewBox="0 0 220 80" role="img" aria-label="심전도 파형">
+                <polyline
+                  id="ecg-line"
+                  points="0,45 28,45 36,20 45,60 58,45 92,45 100,30 108,45 132,45 142,18 151,62 164,45 220,45"
+                />
+              </svg>
+              <div class="vitals">
+                <span><small>HR</small><strong id="hr">--</strong></span>
+                <span><small>SpO₂</small><strong id="spo2">--</strong></span>
+                <span><small>BP</small><strong id="bp">--</strong></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel" id="hud-cluster" aria-label="KHSIM 진행 패널">
+        <div class="hud-cluster-header" id="hud-cluster-drag-handle">
+          <span>Clinical HUD</span>
+          <button type="button" id="hud-cluster-toggle" aria-controls="hud-cluster-body" aria-expanded="true">Min</button>
+        </div>
+        <div class="hud-cluster-body" id="hud-cluster-body">
+        <div class="hud-card workflow-hud floating-clinical-card" id="focus-card" aria-label="워크플로우 상태">
+          <div class="floating-card-header">
+            <p class="eyebrow">Current Focus</p>
+            <button type="button" data-floating-card-toggle="focus" aria-controls="focus-card-body" aria-label="Current Focus 카드 접기">Min</button>
+          </div>
+          <div class="floating-card-body" id="focus-card-body">
+            <h2 id="scene-title">입실</h2>
+            <p id="scene-text"></p>
+          </div>
+        </div>
+
+        <div class="metrics hud-scores" aria-label="간호 평가 점수">
+          <div class="metric">
+            <span>안전</span>
+            <strong id="safety-score">50</strong>
+          </div>
+          <div class="metric">
+            <span>전문성</span>
+            <strong id="clinical-score">50</strong>
+          </div>
+          <div class="metric">
+            <span>공감</span>
+            <strong id="empathy-score">50</strong>
+          </div>
+          <div class="metric">
+            <span>절차</span>
+            <strong id="protocol-score">50</strong>
+          </div>
+        </div>
+
+        <div class="chart hud-card notifications-hud floating-clinical-card" id="events-card" aria-label="임상 이벤트">
+          <div class="floating-card-header">
+            <h3>Events</h3>
+            <button type="button" data-floating-card-toggle="events" aria-controls="events-card-body" aria-label="Events 카드 접기">Min</button>
+          </div>
+          <div class="floating-card-body" id="events-card-body">
+            <ul id="log"></ul>
+          </div>
+        </div>
+
+        <div class="actions" id="actions"></div>
+
+        <div class="evaluation" id="evaluation" hidden>
+          <h3>간호 평가표</h3>
+          <div id="evaluation-body"></div>
+        </div>
+        </div>
+      </aside>
+    </main>
+
+    <div class="emr-modal" id="emr-modal" hidden role="dialog" aria-modal="true" aria-labelledby="emr-title">
+      <div class="emr-shell">
+        <header class="emr-header">
+          <div>
+            <p class="eyebrow">침상 EMR</p>
+            <h2 id="emr-title">Kim Hyun-soo</h2>
+          </div>
+          <button class="emr-close" id="emr-close" type="button" aria-label="EMR 닫기">닫기</button>
+        </header>
+        <nav class="emr-tabs" aria-label="EMR sections">
+          <button type="button" class="active" data-emr-tab="summary">요약</button>
+          <button type="button" data-emr-tab="labs">검사</button>
+          <button type="button" data-emr-tab="orders">처방</button>
+          <button type="button" data-emr-tab="meds">투약</button>
+          <button type="button" data-emr-tab="notes">간호기록</button>
+        </nav>
+        <div class="emr-content" id="emr-content"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      import * as THREE from "./assets/vendor/three.module.js";
+      import { GLTFLoader } from "./assets/vendor/GLTFLoader.js";
+
+      const container = document.querySelector("#three-container");
+
+      if (container) {
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xdce8ec);
+
+        const camera = new THREE.PerspectiveCamera(39, 1, 0.1, 100);
+        const baseCameraPosition = new THREE.Vector3(3.45, 2.35, 4.35);
+        const baseCameraTarget = new THREE.Vector3(0.05, 1.18, -0.32);
+        camera.position.copy(baseCameraPosition);
+        camera.lookAt(baseCameraTarget);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.append(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xf4f8fb, 0.72);
+        scene.add(ambientLight);
+
+        const roomHemisphere = new THREE.HemisphereLight(0xf8fff8, 0x5e6d68, 0.62);
+        scene.add(roomHemisphere);
+
+        const directionalLight = new THREE.DirectionalLight(0xfffbf3, 1.35);
+        directionalLight.position.set(1.4, 6.4, 2.6);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.set(2048, 2048);
+        directionalLight.shadow.camera.near = 1;
+        directionalLight.shadow.camera.far = 12;
+        directionalLight.shadow.camera.left = -5.8;
+        directionalLight.shadow.camera.right = 5.8;
+        directionalLight.shadow.camera.top = 4.8;
+        directionalLight.shadow.camera.bottom = -4.8;
+        directionalLight.shadow.bias = -0.00025;
+        directionalLight.shadow.normalBias = 0.018;
+        scene.add(directionalLight);
+
+        const ceilingFillLight = new THREE.PointLight(0xfff8ec, 0.34, 7.2);
+        ceilingFillLight.position.set(-0.9, 3.6, 0.35);
+        scene.add(ceilingFillLight);
+
+        const clinicalLight = new THREE.PointLight(0xfff3dd, 0.18, 5.8);
+        clinicalLight.position.set(0.2, 2.8, 1.1);
+        scene.add(clinicalLight);
+
+        const monitorGlowLight = new THREE.PointLight(0x40f39d, 0.0, 3.1);
+        monitorGlowLight.position.set(2.42, 1.95, -1.08);
+        scene.add(monitorGlowLight);
+
+        const bedsideFillLight = new THREE.PointLight(0xb7dcff, 0.08, 4.2);
+        bedsideFillLight.position.set(-0.6, 2.35, 1.65);
+        scene.add(bedsideFillLight);
+
+        function makeSubtleTexture(kind, base, accent) {
+          const canvas = document.createElement("canvas");
+          canvas.width = 256;
+          canvas.height = 256;
+          const context = canvas.getContext("2d");
+          context.fillStyle = base;
+          context.fillRect(0, 0, 256, 256);
+
+          if (kind === "floor") {
+            context.strokeStyle = accent;
+            context.lineWidth = 1;
+            for (let x = 0; x <= 256; x += 64) {
+              context.beginPath();
+              context.moveTo(x, 0);
+              context.lineTo(x, 256);
+              context.stroke();
+            }
+            for (let y = 0; y <= 256; y += 64) {
+              context.beginPath();
+              context.moveTo(0, y);
+              context.lineTo(256, y);
+              context.stroke();
+            }
+            context.fillStyle = "rgba(255,255,255,0.07)";
+            for (let i = 0; i < 180; i += 1) context.fillRect(Math.random() * 256, Math.random() * 256, 1, 1);
+          }
+
+          if (kind === "wall") {
+            const gradient = context.createLinearGradient(0, 0, 0, 256);
+            gradient.addColorStop(0, "rgba(255,255,255,0.12)");
+            gradient.addColorStop(1, "rgba(92,110,122,0.06)");
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 256, 256);
+            context.fillStyle = accent;
+            for (let i = 0; i < 110; i += 1) context.fillRect(Math.random() * 256, Math.random() * 256, 1, 1);
+          }
+
+          if (kind === "fabric") {
+            context.strokeStyle = accent;
+            context.lineWidth = 0.7;
+            for (let y = 8; y < 256; y += 12) {
+              context.beginPath();
+              context.moveTo(0, y + Math.sin(y) * 1.5);
+              context.lineTo(256, y + Math.cos(y * 0.2) * 1.5);
+              context.stroke();
+            }
+          }
+
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.RepeatWrapping;
+          return texture;
+        }
+
+        const floorTexture = makeSubtleTexture("floor", "#cbd9de", "rgba(90,112,122,0.11)");
+        floorTexture.repeat.set(4, 3);
+        const wallTexture = makeSubtleTexture("wall", "#f5f8f8", "rgba(80,102,112,0.045)");
+        wallTexture.repeat.set(2, 1);
+        const sheetTexture = makeSubtleTexture("fabric", "#eef5f7", "rgba(160,178,186,0.08)");
+        sheetTexture.repeat.set(1.6, 1.2);
+
+        function roundedBox(width, height, depth, radius, material) {
+          const shape = new THREE.Shape();
+          const x = -width / 2;
+          const y = -height / 2;
+          shape.moveTo(x + radius, y);
+          shape.lineTo(x + width - radius, y);
+          shape.quadraticCurveTo(x + width, y, x + width, y + radius);
+          shape.lineTo(x + width, y + height - radius);
+          shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+          shape.lineTo(x + radius, y + height);
+          shape.quadraticCurveTo(x, y + height, x, y + height - radius);
+          shape.lineTo(x, y + radius);
+          shape.quadraticCurveTo(x, y, x + radius, y);
+          const geometry = new THREE.ExtrudeGeometry(shape, {
+            depth,
+            bevelEnabled: true,
+            bevelSize: radius * 0.34,
+            bevelThickness: radius * 0.34,
+            bevelSegments: 5,
+          });
+          geometry.center();
+          return new THREE.Mesh(geometry, material);
+        }
+
+        const floor = new THREE.Mesh(
+          new THREE.PlaneGeometry(12, 9),
+          new THREE.MeshStandardMaterial({ color: 0xd7e3e6, map: floorTexture, roughness: 0.88, metalness: 0.02 }),
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const backWall = new THREE.Mesh(
+          new THREE.BoxGeometry(12, 4.5, 0.12),
+          new THREE.MeshStandardMaterial({ color: 0xf7fafb, map: wallTexture, roughness: 0.84 }),
+        );
+        backWall.position.set(0, 2.25, -3.2);
+        backWall.receiveShadow = true;
+        scene.add(backWall);
+
+        const sideWall = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 4.5, 9),
+          new THREE.MeshStandardMaterial({ color: 0xe6ece9, map: wallTexture, roughness: 0.86 }),
+        );
+        sideWall.position.set(4.05, 2.25, 0.8);
+        sideWall.receiveShadow = true;
+        scene.add(sideWall);
+
+        const headwallPanel = roundedBox(2.45, 0.32, 0.065, 0.035, new THREE.MeshStandardMaterial({ color: 0xf3f5f2, roughness: 0.58 }));
+        headwallPanel.position.set(-0.55, 1.94, -3.11);
+        headwallPanel.castShadow = true;
+        scene.add(headwallPanel);
+
+        const oxygenOutlet = roundedBox(0.16, 0.09, 0.025, 0.018, new THREE.MeshStandardMaterial({ color: 0xa2d1c8, roughness: 0.48 }));
+        oxygenOutlet.position.set(0.2, 1.92, -3.05);
+        oxygenOutlet.castShadow = true;
+        scene.add(oxygenOutlet);
+
+        const suctionOutlet = roundedBox(0.16, 0.09, 0.025, 0.018, new THREE.MeshStandardMaterial({ color: 0xd4d8d2, roughness: 0.48 }));
+        suctionOutlet.position.set(0.52, 1.92, -3.05);
+        suctionOutlet.castShadow = true;
+        scene.add(suctionOutlet);
+
+        const normalBedColor = new THREE.Color(0x8fa9b6);
+        const painAlertBedColor = new THREE.Color(0xd94b43);
+        const bedMaterial = new THREE.MeshStandardMaterial({
+          color: normalBedColor,
+          roughness: 0.74,
+          metalness: 0.04,
+        });
+        const bed = roundedBox(4.8, 0.52, 2.05, 0.13, bedMaterial);
+        bed.position.set(0.35, 0.82, -0.35);
+        bed.castShadow = true;
+        scene.add(bed);
+
+        const mattressMaterial = new THREE.MeshStandardMaterial({ color: 0xeef5f7, map: sheetTexture, roughness: 0.92 });
+        const mattressTop = roundedBox(4.48, 0.18, 1.82, 0.12, mattressMaterial);
+        mattressTop.position.set(0.26, 1.12, -0.35);
+        mattressTop.castShadow = true;
+        mattressTop.receiveShadow = true;
+        scene.add(mattressTop);
+
+        const mattressEdgeMaterial = new THREE.MeshStandardMaterial({ color: 0xe7f0f3, map: sheetTexture, roughness: 0.92 });
+        [0.58, -1.28].forEach((z) => {
+          const edge = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 4.36, 18), mattressEdgeMaterial);
+          edge.rotation.z = Math.PI / 2;
+          edge.position.set(0.26, 1.22, z);
+          edge.castShadow = true;
+          scene.add(edge);
+        });
+
+        const railMaterial = new THREE.MeshStandardMaterial({ color: 0xd7e1e6, metalness: 0.28, roughness: 0.36 });
+        const bedRailNear = roundedBox(3.1, 0.1, 0.06, 0.025, railMaterial);
+        bedRailNear.position.set(0.15, 1.24, 0.74);
+        bedRailNear.castShadow = true;
+        scene.add(bedRailNear);
+        const bedRailFar = roundedBox(2.8, 0.08, 0.05, 0.02, railMaterial);
+        bedRailFar.position.set(0.45, 1.2, -1.42);
+        bedRailFar.castShadow = true;
+        scene.add(bedRailFar);
+        [-1.15, 0.15, 1.45].forEach((x) => {
+          const railPost = roundedBox(0.045, 0.42, 0.045, 0.018, railMaterial);
+          railPost.position.set(x, 1.05, 0.74);
+          railPost.castShadow = true;
+          scene.add(railPost);
+        });
+
+        [-1.72, 1.85].forEach((x) => {
+          [0.58, -1.22].forEach((z) => {
+            const caster = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.018, 8, 20), new THREE.MeshStandardMaterial({ color: 0x243036, roughness: 0.5, metalness: 0.12 }));
+            caster.position.set(x, 0.49, z);
+            caster.rotation.y = Math.PI / 2;
+            caster.castShadow = true;
+            scene.add(caster);
+          });
+        });
+
+        const pillow = roundedBox(0.86, 0.14, 0.72, 0.12, new THREE.MeshStandardMaterial({ color: 0xf4f8fa, map: sheetTexture, roughness: 0.9 }));
+        pillow.position.set(-1.64, 1.31, -0.35);
+        pillow.rotation.z = -0.08;
+        pillow.castShadow = true;
+        scene.add(pillow);
+        const pillowIndent = new THREE.Mesh(
+          new THREE.CircleGeometry(0.24, 24),
+          new THREE.MeshBasicMaterial({ color: 0xb8c4ca, transparent: true, opacity: 0.16, depthWrite: false }),
+        );
+        pillowIndent.position.set(-1.72, 1.39, -0.35);
+        pillowIndent.rotation.x = -Math.PI / 2;
+        pillowIndent.scale.set(1.18, 0.62, 1);
+        scene.add(pillowIndent);
+
+        let currentPain = 0;
+        let latestVitals = null;
+        let latestPatientState = null;
+        let latestUrgency = { level: "mild", score: 0 };
+        let is3DMonitorActive = false;
+        let latestCueProfile = {
+          cueLevel: 0,
+          restlessness: 0,
+          anxiety: 0,
+          diaphoresis: 0,
+          breathingEffort: 0,
+          alarm: 0,
+          responsiveness: 0,
+          pallor: 0,
+          rhythmInstability: 0,
+          calm: 0,
+          improving: false,
+        };
+        let alarmAudioContext = null;
+        let lastAlarmToneAt = 0;
+
+        function clamp01(value) {
+          return Math.max(0, Math.min(1, value));
+        }
+
+        function cueProfileFromState(nextState, vitals) {
+          const urgencyLevel = nextState?.urgency?.level || "mild";
+          const patientStatus = nextState?.patientStatus || {};
+          const urgencyWeight = { mild: 0, moderate: 0.38, severe: 0.7, critical: 1 }[urgencyLevel] || 0;
+          const pain = patientStatus.pain ?? 0;
+          const anxiety = patientStatus.anxiety ?? 0;
+          const breathing = patientStatus.breathing ?? 0;
+          const hr = Number(vitals?.hr || 0);
+          const spo2 = Number(vitals?.spo2 || 99);
+          const improving = Boolean(nextState?.oxygenApplied || nextState?.prnMedicationsGiven?.length) && urgencyLevel !== "critical";
+
+          const restlessness = clamp01((pain - 5) / 4 + (anxiety - 68) / 70 + urgencyWeight * 0.35);
+          const anxietyCue = clamp01((anxiety - 58) / 42 + urgencyWeight * 0.24);
+          const diaphoresis = clamp01((pain - 5.8) / 3.5 + (anxiety - 72) / 62 + urgencyWeight * 0.34);
+          const breathingEffort = clamp01((breathing - 55) / 35 + Math.max(0, 94 - spo2) / 9 + urgencyWeight * 0.28);
+          const alarm = clamp01((hr - 112) / 26 + Math.max(0, 94 - spo2) / 8 + urgencyWeight * 0.58);
+          const responsiveness = clamp01(Math.max(0, 92 - spo2) / 7 + (breathing - 78) / 28 + urgencyWeight * 0.42);
+          const pallor = clamp01(Math.max(0, 94 - spo2) / 8 + (pain - 6.5) / 4 + urgencyWeight * 0.3);
+          const rhythmInstability = clamp01((hr - 118) / 30 + (pain - 6.5) / 6 + urgencyWeight * 0.45);
+          const calm = clamp01((70 - anxiety) / 36 + (5 - pain) / 4 + (spo2 - 93) / 8);
+          const cueLevel = urgencyLevel === "critical" ? 3 : urgencyLevel === "severe" ? 2 : urgencyLevel === "moderate" ? 1 : 0;
+
+          return {
+            cueLevel,
+            restlessness: improving ? restlessness * 0.72 : restlessness,
+            anxiety: improving ? anxietyCue * 0.68 : anxietyCue,
+            diaphoresis: improving ? diaphoresis * 0.62 : diaphoresis,
+            breathingEffort: improving ? breathingEffort * 0.72 : breathingEffort,
+            alarm: improving ? alarm * 0.56 : alarm,
+            responsiveness: improving ? responsiveness * 0.7 : responsiveness,
+            pallor: improving ? pallor * 0.62 : pallor,
+            rhythmInstability: improving ? rhythmInstability * 0.55 : rhythmInstability,
+            calm: improving ? Math.max(calm, 0.44) : calm,
+            improving,
+          };
+        }
+
+        function unlockAlarmAudio() {
+          if (alarmAudioContext) return;
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContext) return;
+          alarmAudioContext = new AudioContext();
+        }
+
+        window.addEventListener("pointerdown", unlockAlarmAudio, { once: true });
+        window.addEventListener("keydown", unlockAlarmAudio, { once: true });
+
+        function playAlarmTone(alarmStrength, urgencyLevel) {
+          if (!alarmAudioContext || alarmAudioContext.state !== "running" || alarmStrength < 0.45 || !is3DMonitorActive) return;
+
+          const now = performance.now();
+          const interval = urgencyLevel === "critical" ? 780 : urgencyLevel === "severe" ? 1180 : 1750;
+          if (now - lastAlarmToneAt < interval) return;
+          lastAlarmToneAt = now;
+
+          const oscillator = alarmAudioContext.createOscillator();
+          const gain = alarmAudioContext.createGain();
+          oscillator.type = urgencyLevel === "critical" ? "square" : "sine";
+          oscillator.frequency.value = urgencyLevel === "critical" ? 880 : 620;
+          gain.gain.setValueAtTime(0.0001, alarmAudioContext.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.035 + alarmStrength * 0.035, alarmAudioContext.currentTime + 0.018);
+          gain.gain.exponentialRampToValueAtTime(0.0001, alarmAudioContext.currentTime + 0.14);
+          oscillator.connect(gain);
+          gain.connect(alarmAudioContext.destination);
+          oscillator.start();
+          oscillator.stop(alarmAudioContext.currentTime + 0.16);
+        }
+
+
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        const interactiveObjects = [];
+        const targetLabels = {
+          patient: "환자: 대화와 직접 사정",
+          monitor: "모니터: ECG와 활력징후",
+          emr: "EMR: chart review",
+          chart: "차트: orders/labs",
+          medication: "투약 카트: 준비와 확인",
+          communication: "의사 연락: SBAR",
+        };
+        const hotspotMaterial = new THREE.MeshBasicMaterial({
+          color: 0x147d7e,
+          transparent: true,
+          opacity: 0.22,
+          depthWrite: false,
+        });
+
+        function registerInteractive(mesh, target) {
+          mesh.userData.clinicalTarget = target;
+          interactiveObjects.push(mesh);
+          return mesh;
+        }
+
+        function makeTube(points, color, radius = 0.012, opacity = 1) {
+          const saggedPoints = [];
+          const vectors = points.map(([x, y, z]) => new THREE.Vector3(x, y, z));
+          for (let i = 0; i < vectors.length - 1; i += 1) {
+            const start = vectors[i];
+            const end = vectors[i + 1];
+            for (let step = 0; step < 6; step += 1) {
+              const t = step / 6;
+              const point = start.clone().lerp(end, t);
+              point.y -= Math.sin(t * Math.PI) * (0.025 + radius * 1.8);
+              saggedPoints.push(point);
+            }
+          }
+          saggedPoints.push(vectors[vectors.length - 1]);
+          const curve = new THREE.CatmullRomCurve3(saggedPoints);
+          const material = new THREE.MeshStandardMaterial({
+            color,
+            roughness: 0.5,
+            transparent: opacity < 1,
+            opacity,
+          });
+          const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 32, radius, 8, false), material);
+          tube.castShadow = true;
+          scene.add(tube);
+          return tube;
+        }
+
+        function setInteractionHint(target = null) {
+          if (!interactionHint) return;
+          interactionHint.textContent = target
+            ? targetLabels[target]
+            : "환자와 먼저 대화해보세요.";
+        }
+
+        function updatePointer(event) {
+          const rect = renderer.domElement.getBoundingClientRect();
+          pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+          pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        }
+
+        function findInteractiveTarget(event) {
+          updatePointer(event);
+          raycaster.setFromCamera(pointer, camera);
+          return raycaster
+            .intersectObjects(interactiveObjects.filter((object) => object.visible !== false), false)[0]
+            ?.object?.userData?.clinicalTarget ?? null;
+        }
+
+        renderer.domElement.addEventListener("pointermove", (event) => {
+          const target = findInteractiveTarget(event);
+          renderer.domElement.style.cursor = target ? "pointer" : "default";
+          setInteractionHint(target);
+        });
+
+        renderer.domElement.addEventListener("pointerleave", () => {
+          renderer.domElement.style.cursor = "default";
+          setInteractionHint();
+        });
+
+        renderer.domElement.addEventListener("click", (event) => {
+          const target = findInteractiveTarget(event);
+          if (target) {
+            event.stopPropagation();
+            const handledByTool = window.handleClinicalTargetClick?.(target, { x: event.clientX, y: event.clientY });
+            if (!handledByTool) {
+              window.openClinicalInteractionMenu?.(target, { x: event.clientX, y: event.clientY });
+            }
+          }
+        });
+
+        function monitorColor() {
+          if (latestUrgency.level === "critical") return "#ff4d4d";
+          if (latestUrgency.level === "severe") return "#ffd166";
+          if (latestUrgency.level === "moderate") return "#7dd3fc";
+          return "#40f39d";
+        }
+
+        function drawMonitorGrid() {
+          for (let x = 0; x < monitorCanvas.width; x += 16) {
+            monitorCanvasContext.strokeStyle = x % 80 === 0 ? "rgba(64, 243, 157, 0.15)" : "rgba(64, 243, 157, 0.055)";
+            monitorCanvasContext.lineWidth = x % 80 === 0 ? 1.2 : 0.8;
+            monitorCanvasContext.beginPath();
+            monitorCanvasContext.moveTo(x, 0);
+            monitorCanvasContext.lineTo(x, monitorCanvas.height);
+            monitorCanvasContext.stroke();
+          }
+
+          for (let y = 0; y < monitorCanvas.height; y += 16) {
+            monitorCanvasContext.strokeStyle = y % 80 === 0 ? "rgba(64, 243, 157, 0.15)" : "rgba(64, 243, 157, 0.055)";
+            monitorCanvasContext.lineWidth = y % 80 === 0 ? 1.2 : 0.8;
+            monitorCanvasContext.beginPath();
+            monitorCanvasContext.moveTo(0, y);
+            monitorCanvasContext.lineTo(monitorCanvas.width, y);
+            monitorCanvasContext.stroke();
+          }
+        }
+
+        function drawMonitorLabel(label, value, unit, x, y, color = monitorColor()) {
+          monitorCanvasContext.fillStyle = "#9fb5bd";
+          monitorCanvasContext.font = "900 24px Menlo, Consolas, monospace";
+          monitorCanvasContext.fillText(label, x, y);
+
+          monitorCanvasContext.fillStyle = color;
+          monitorCanvasContext.font = "900 52px Menlo, Consolas, monospace";
+          monitorCanvasContext.fillText(String(value), x, y + 26);
+
+          if (unit) {
+            monitorCanvasContext.fillStyle = "#9fb5bd";
+            monitorCanvasContext.font = "800 20px Menlo, Consolas, monospace";
+            monitorCanvasContext.fillText(unit, x + 108, y + 50);
+          }
+        }
+
+        function drawVitalsStrip(y, offset, color, amplitude = 18, speed = 64) {
+          const pattern = [0, 0, -0.12, 0.22, -0.16, 0, 0.1, 0, 0, -0.08, 0.12, 0];
+          monitorCanvasContext.strokeStyle = color;
+          monitorCanvasContext.lineWidth = 3;
+          monitorCanvasContext.lineJoin = "round";
+          monitorCanvasContext.beginPath();
+
+          for (let x = 0; x <= monitorCanvas.width; x += 7) {
+            const phase = ((x + offset) / speed) % pattern.length;
+            const index = Math.floor(phase + pattern.length) % pattern.length;
+            const nextIndex = (index + 1) % pattern.length;
+            const mix = phase - Math.floor(phase);
+            const wave = pattern[index] * (1 - mix) + pattern[nextIndex] * mix;
+            const pointY = y + wave * amplitude;
+            if (x === 0) monitorCanvasContext.moveTo(x, pointY);
+            else monitorCanvasContext.lineTo(x, pointY);
+          }
+
+          monitorCanvasContext.stroke();
+        }
+
+        function drawEcgWaveform(offset, baseline = 152) {
+          const patientPain = latestPatientState?.patientStatus?.pain ?? 0;
+          const patientAnxiety = latestPatientState?.patientStatus?.anxiety ?? 0;
+          const rhythmInstability = latestCueProfile.rhythmInstability || 0;
+          const urgencyBoost = latestUrgency.level === "critical" ? 18 : latestUrgency.level === "severe" ? 10 : latestUrgency.level === "moderate" ? 4 : 0;
+          const amplitude = 28 + Math.min(34, patientPain * 2.4 + urgencyBoost + rhythmInstability * 14);
+          const segmentWidth = Math.max(30, 78 - patientAnxiety / 3 - urgencyBoost - rhythmInstability * 16);
+          const pattern = rhythmInstability > 0.62
+            ? [0, 0.04, -0.08, -0.18, 1.05, -0.78, 0.32, -0.03, 0.08, 0.22, -0.1, 0.02]
+            : [0, 0, 0, -0.16, 1, -0.72, 0.25, 0, 0, 0.14, 0.06, 0];
+          const color = monitorColor();
+
+          monitorCanvasContext.strokeStyle = color;
+          monitorCanvasContext.lineWidth = latestUrgency.level === "critical" ? 5 : 4;
+          monitorCanvasContext.lineJoin = "round";
+          monitorCanvasContext.shadowColor = color;
+          monitorCanvasContext.shadowBlur = 8;
+          monitorCanvasContext.beginPath();
+
+          for (let x = -segmentWidth; x <= monitorCanvas.width + segmentWidth; x += segmentWidth / pattern.length) {
+            const patternIndex = Math.floor(((x + offset) / (segmentWidth / pattern.length))) % pattern.length;
+            const normalizedIndex = (patternIndex + pattern.length) % pattern.length;
+            const wander = Math.sin((x + offset) * 0.025) * rhythmInstability * 4;
+            const artifact = Math.sin((x + offset) * 0.16) * rhythmInstability * 7;
+            const y = baseline + pattern[normalizedIndex] * amplitude + wander + artifact;
+
+            if (x <= -segmentWidth) monitorCanvasContext.moveTo(x, y);
+            else monitorCanvasContext.lineTo(x, y);
+          }
+
+          monitorCanvasContext.stroke();
+          monitorCanvasContext.shadowBlur = 0;
+        }
+
+        function drawMonitorTrend(x, y, width, label, value, worsening, color) {
+          monitorCanvasContext.fillStyle = "#9fb5bd";
+          monitorCanvasContext.font = "800 14px Menlo, Consolas, monospace";
+          monitorCanvasContext.fillText(label, x, y);
+          monitorCanvasContext.strokeStyle = color;
+          monitorCanvasContext.lineWidth = 2;
+          monitorCanvasContext.beginPath();
+          for (let i = 0; i < 5; i += 1) {
+            const px = x + 44 + i * (width / 4);
+            const py = y + 4 + (worsening ? 10 - i * 2.4 : i * 1.7);
+            if (i === 0) monitorCanvasContext.moveTo(px, py);
+            else monitorCanvasContext.lineTo(px, py);
+          }
+          monitorCanvasContext.stroke();
+          monitorCanvasContext.fillStyle = color;
+          monitorCanvasContext.font = "900 14px Menlo, Consolas, monospace";
+          monitorCanvasContext.fillText(String(value), x + 102, y);
+        }
+
+        function drawMonitorTexture(isMonitorActive) {
+          monitorCanvasContext.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
+          monitorCanvasContext.fillStyle = "#020607";
+          monitorCanvasContext.fillRect(0, 0, monitorCanvas.width, monitorCanvas.height);
+          drawMonitorGrid();
+
+          const vitals = latestVitals || { hr: "--", spo2: "--", rr: "--", bp: "--" };
+          const active = Boolean(isMonitorActive && latestVitals);
+          const color = active ? monitorColor() : "#2f5f55";
+          const spo2Color = active && Number(vitals.spo2) <= 90 ? "#ff4d4d" : active && Number(vitals.spo2) <= 92 ? "#ffd166" : "#7dd3fc";
+          const rrColor = active && Number(vitals.rr) >= 28 ? "#ffd166" : "#ffd166";
+          const alarmStrength = latestCueProfile.alarm || 0;
+          const time = performance.now();
+          const waveRight = 328;
+
+          monitorCanvasContext.textBaseline = "top";
+          monitorCanvasContext.fillStyle = "#9fb5bd";
+          monitorCanvasContext.font = "900 18px Menlo, Consolas, monospace";
+          monitorCanvasContext.fillText("KHSIM PACU-ICU", 18, 12);
+          monitorCanvasContext.fillStyle = active ? "#40f39d" : "#2f5f55";
+          monitorCanvasContext.fillText(active ? "MONITORING" : "STANDBY", 192, 12);
+          monitorCanvasContext.fillStyle = "#ffd166";
+          monitorCanvasContext.font = "900 14px Menlo, Consolas, monospace";
+          monitorCanvasContext.fillText("II  x1.0  NIBP", 348, 16);
+
+          monitorCanvasContext.strokeStyle = "rgba(159, 181, 189, 0.22)";
+          monitorCanvasContext.lineWidth = 2;
+          monitorCanvasContext.beginPath();
+          monitorCanvasContext.moveTo(waveRight, 38);
+          monitorCanvasContext.lineTo(waveRight, 308);
+          monitorCanvasContext.stroke();
+
+          [38, 132, 218, 282].forEach((y) => {
+            monitorCanvasContext.strokeStyle = "rgba(64, 243, 157, 0.13)";
+            monitorCanvasContext.lineWidth = 1;
+            monitorCanvasContext.beginPath();
+            monitorCanvasContext.moveTo(12, y);
+            monitorCanvasContext.lineTo(waveRight - 12, y);
+            monitorCanvasContext.stroke();
+          });
+
+          monitorCanvasContext.fillStyle = "#9fb5bd";
+          monitorCanvasContext.font = "900 13px Menlo, Consolas, monospace";
+          monitorCanvasContext.fillText("ECG II", 18, 48);
+          monitorCanvasContext.fillText("PLETH", 18, 142);
+          monitorCanvasContext.fillText("RESP", 18, 228);
+
+          monitorCanvasContext.save();
+          monitorCanvasContext.beginPath();
+          monitorCanvasContext.rect(58, 42, waveRight - 70, 250);
+          monitorCanvasContext.clip();
+          if (active) {
+            drawEcgWaveform((time * (0.09 + latestCueProfile.rhythmInstability * 0.035)) % 512, 92);
+            drawVitalsStrip(176, (time * (0.05 + latestCueProfile.alarm * 0.018)) % 512, spo2Color, 24 + latestCueProfile.alarm * 5, 88);
+            drawVitalsStrip(248, (time * (0.035 + latestCueProfile.breathingEffort * 0.018)) % 512, rrColor, 18 + latestCueProfile.breathingEffort * 5, 128);
+          } else {
+            drawVitalsStrip(92, 0, "#24423d", 8, 88);
+            drawVitalsStrip(176, 0, "#24423d", 8, 88);
+            drawVitalsStrip(248, 0, "#24423d", 8, 128);
+          }
+          monitorCanvasContext.restore();
+
+          const drawVital = (label, value, unit, y, vitalColor, size = 52) => {
+            monitorCanvasContext.fillStyle = "#9fb5bd";
+            monitorCanvasContext.font = "900 18px Menlo, Consolas, monospace";
+            monitorCanvasContext.fillText(label, 348, y);
+            monitorCanvasContext.fillStyle = active ? vitalColor : "#2f5f55";
+            monitorCanvasContext.font = "900 " + size + "px Menlo, Consolas, monospace";
+            monitorCanvasContext.fillText(active ? String(value) : "--", 348, y + 20);
+            monitorCanvasContext.fillStyle = "#9fb5bd";
+            monitorCanvasContext.font = "900 15px Menlo, Consolas, monospace";
+            monitorCanvasContext.fillText(unit, 462, y + 52);
+          };
+
+          drawVital("HR", vitals.hr, "bpm", 48, color, 56);
+          drawVital("SpO2", vitals.spo2, "%", 124, spo2Color, 54);
+          drawVital("RR", vitals.rr, "/min", 200, rrColor, 48);
+
+          monitorCanvasContext.fillStyle = "#9fb5bd";
+          monitorCanvasContext.font = "900 18px Menlo, Consolas, monospace";
+          monitorCanvasContext.fillText("NIBP", 348, 270);
+          monitorCanvasContext.fillStyle = active ? "#f3f7f4" : "#2f5f55";
+          monitorCanvasContext.font = "900 26px Menlo, Consolas, monospace";
+          monitorCanvasContext.fillText(active ? vitals.bp : "---/--", 348, 292);
+
+          if (active && (latestUrgency.level === "critical" || latestUrgency.level === "severe" || alarmStrength > 0.55)) {
+            const blinkRate = latestUrgency.level === "critical" ? 260 : 420;
+            const blink = Math.floor(time / blinkRate) % 2 === 0;
+            if (blink) {
+              monitorCanvasContext.fillStyle = latestUrgency.level === "critical" ? "#ff4d4d" : "#ffd166";
+              monitorCanvasContext.font = "900 20px Menlo, Consolas, monospace";
+              monitorCanvasContext.fillText(latestUrgency.level === "critical" ? "ALARM" : "WATCH", 238, 12);
+            }
+          }
+
+          monitorTexture.needsUpdate = true;
+        }
+
+        const patientSupineBase = {
+          position: new THREE.Vector3(-2.48, 1.36, -0.35),
+          rotation: new THREE.Euler(0, 0, Math.PI / 2),
+          scale: 1.58,
+          skinColor: new THREE.Color(0xc99a78),
+          pallorColor: new THREE.Color(0xd8ddd7),
+        };
+        const patientModelRoot = new THREE.Group();
+        patientModelRoot.name = "GLTF humanoid patient root";
+        patientModelRoot.position.copy(patientSupineBase.position);
+        patientModelRoot.rotation.copy(patientSupineBase.rotation);
+        patientModelRoot.scale.setScalar(patientSupineBase.scale);
+        scene.add(patientModelRoot);
+
+        const patientModelSkinMaterials = [];
+        const patientModelClothMaterials = [];
+        const patientGownGroup = new THREE.Group();
+        const patientBones = {};
+        const gltfLoader = new GLTFLoader();
+        const PATIENT_AXIS_DEBUG = false;
+        let patientHumanoid = null;
+        const patientModelAxisCorrection = new THREE.Group();
+        patientModelAxisCorrection.name = "KHSIM patient GLTF axis correction";
+        patientModelAxisCorrection.rotation.set(0, Math.PI / 2, 0);
+        patientModelRoot.add(patientModelAxisCorrection);
+        if (PATIENT_AXIS_DEBUG) {
+          patientModelAxisCorrection.add(new THREE.AxesHelper(0.72));
+          patientModelAxisCorrection.add(new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 0.9, 0xffd166));
+          patientModelAxisCorrection.add(new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 0.9, 0x4ade80));
+        }
+        let patientHeadAnchor = new THREE.Object3D();
+        const patientHeadAnchorBase = new THREE.Vector3(-1.85, 1.5, -0.35);
+        patientHeadAnchor.position.copy(patientHeadAnchorBase);
+        scene.add(patientHeadAnchor);
+
+        function normalizeHumanoidBoneName(name) {
+          const mixamoName = name.replace(/^mixamorig:?/, "");
+          const cesiumBoneMap = {
+            Skeleton_torso_joint_1: "Hips",
+            Skeleton_torso_joint_2: "Spine1",
+            torso_joint_3: "Spine2",
+            Skeleton_neck_joint_1: "Neck",
+            Skeleton_neck_joint_2: "Head",
+            Skeleton_arm_joint_L__4_: "LeftArm",
+            Skeleton_arm_joint_L__3_: "LeftForeArm",
+            Skeleton_arm_joint_L__2_: "LeftHand",
+            Skeleton_arm_joint_R: "RightArm",
+            Skeleton_arm_joint_R__2_: "RightForeArm",
+            Skeleton_arm_joint_R__3_: "RightHand",
+            leg_joint_L_1: "LeftUpLeg",
+            leg_joint_L_2: "LeftLeg",
+            leg_joint_L_3: "LeftFoot",
+            leg_joint_L_5: "LeftToeBase",
+            leg_joint_R_1: "RightUpLeg",
+            leg_joint_R_2: "RightLeg",
+            leg_joint_R_3: "RightFoot",
+            leg_joint_R_5: "RightToeBase",
+            "UpperArm.L": "LeftArm",
+            "LowerArm.L": "LeftForeArm",
+            "UpperArm.R": "RightArm",
+            "LowerArm.R": "RightForeArm",
+            "UpperLeg.L": "LeftUpLeg",
+            "LowerLeg.L": "LeftLeg",
+            "UpperLeg.R": "RightUpLeg",
+            "LowerLeg.R": "RightLeg",
+          };
+          return cesiumBoneMap[mixamoName] || mixamoName;
+        }
+
+        function storeHumanoidRestPose() {
+          Object.values(patientBones).forEach((bone) => {
+            bone.userData.restRotation = bone.rotation.clone();
+            bone.userData.restScale = bone.scale.clone();
+          });
+        }
+
+        function applySupinePatientPose() {
+          const pose = (boneName, rotation = {}, scale = null) => {
+            const bone = patientBones[boneName];
+            if (!bone) return;
+            if (rotation.x) bone.rotation.x += rotation.x;
+            if (rotation.y) bone.rotation.y += rotation.y;
+            if (rotation.z) bone.rotation.z += rotation.z;
+            if (scale) bone.scale.multiply(scale);
+          };
+
+          const cesiumRig = patientBones.LeftArm?.name?.startsWith("Skeleton_arm");
+          if (!cesiumRig) {
+            pose("LeftArm", { x: 1.5 });
+            pose("LeftForeArm", { x: 0.08, z: -0.06 });
+            pose("LeftHand", { x: -0.14, z: 0.12 });
+            pose("RightArm", { x: 1.5 });
+            pose("RightForeArm", { x: 0.08, z: 0.06 });
+            pose("RightHand", { x: -0.14, z: -0.12 });
+          }
+          pose("Head", { x: 0.08, z: -0.04 });
+          pose("Spine2", { x: -0.03 });
+          pose("LeftUpLeg", { z: -0.045 });
+          pose("RightUpLeg", { z: 0.045 });
+          pose("LeftLeg", { x: 0.04 });
+          pose("RightLeg", { x: 0.04 });
+          storeHumanoidRestPose();
+        }
+
+        function clinicalPatientTexture(material) {
+          const image = material.map?.image;
+          if (!image) {
+            material.color.set(0xd2a383);
+            material.needsUpdate = true;
+            return;
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          context.drawImage(image, 0, 0);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const luminance = r * 0.299 + g * 0.587 + b * 0.114;
+            const yellowCloth = r > 120 && g > 80 && b < 95 && r > b * 1.4;
+            const skinRange = r > 35 && r < 190 && g > 18 && g < 145 && b < 125 && r > b * 1.18 && luminance > 38;
+
+            if (yellowCloth) {
+              const shade = THREE.MathUtils.clamp(luminance / 185, 0.56, 1.08);
+              data[i] = 142 * shade;
+              data[i + 1] = 174 * shade;
+              data[i + 2] = 184 * shade;
+            } else if (skinRange) {
+              const shade = THREE.MathUtils.clamp(luminance / 128, 0.56, 1.16);
+              data[i] = 205 * shade;
+              data[i + 1] = 154 * shade;
+              data[i + 2] = 118 * shade;
+            }
+          }
+
+          context.putImageData(imageData, 0, 0);
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.flipY = material.map.flipY;
+          texture.needsUpdate = true;
+          material.map = texture;
+          material.color.set(0xffffff);
+          material.needsUpdate = true;
+        }
+
+        function replaceWithKoreanMaleSkinMaterial(material) {
+          if (material.map) {
+            material.color.set(0xffffff);
+          } else {
+            material.color.copy(patientSupineBase.skinColor);
+          }
+          material.roughness = 0.78;
+          material.metalness = 0.0;
+          material.needsUpdate = true;
+        }
+
+        function configurePatientMaterial(material, materialName) {
+          const name = materialName.toLowerCase();
+          material.roughness = Math.max(material.roughness ?? 0.7, 0.72);
+          material.metalness = 0.0;
+
+          if (name.includes("skin") || name.includes("face") || name.includes("body")) {
+            clinicalPatientTexture(material);
+            replaceWithKoreanMaleSkinMaterial(material);
+            material.userData.basePatientColor = material.color.clone();
+            patientModelSkinMaterials.push(material);
+          } else if (name.includes("hair")) {
+            material.vertexColors = false;
+            material.color.set(0x191411);
+            patientModelClothMaterials.push(material);
+          } else if (name.includes("eye")) {
+            material.vertexColors = false;
+            material.color.set(0x151515);
+            patientModelClothMaterials.push(material);
+          } else if (name.includes("shirt")) {
+            material.vertexColors = false;
+            material.color.set(0xd7eef2);
+            patientModelClothMaterials.push(material);
+          } else if (name.includes("pant") || name.includes("sock")) {
+            material.vertexColors = false;
+            material.color.set(0xf2f6f7);
+            patientModelClothMaterials.push(material);
+          } else {
+            material.vertexColors = false;
+            material.color.set(0xdfe9ec);
+            patientModelClothMaterials.push(material);
+          }
+
+          material.needsUpdate = true;
+        }
+
+        const patientGownMaterial = new THREE.MeshStandardMaterial({
+          color: 0x8aaeb8,
+          roughness: 0.88,
+          metalness: 0.0,
+        });
+        const patientGownTop = roundedBox(0.58, 0.09, 0.56, 0.045, patientGownMaterial);
+        patientGownTop.position.set(-0.68, 1.52, -0.35);
+        patientGownTop.castShadow = true;
+        patientGownTop.receiveShadow = true;
+        patientGownTop.visible = false;
+        patientGownGroup.add(patientGownTop);
+        const patientGownLap = roundedBox(0.56, 0.08, 0.5, 0.04, patientGownMaterial);
+        patientGownLap.position.set(-0.34, 1.49, -0.35);
+        patientGownLap.castShadow = true;
+        patientGownLap.receiveShadow = true;
+        patientGownLap.visible = false;
+        patientGownGroup.add(patientGownLap);
+
+        const patientHairCap = new THREE.Mesh(
+          new THREE.SphereGeometry(0.15, 24, 12),
+          new THREE.MeshStandardMaterial({ color: 0x17110d, roughness: 0.82 }),
+        );
+        patientHairCap.scale.set(1.18, 0.28, 0.86);
+        patientHairCap.position.set(-1.24, 1.43, -0.35);
+        patientHairCap.castShadow = true;
+        patientHairCap.visible = false;
+        scene.add(patientHairCap);
+
+        gltfLoader.load(
+          "./assets/models/patient-adult-male.glb",
+          (gltf) => {
+            patientHumanoid = gltf.scene;
+            patientHumanoid.name = "KHSIM GLTF connected humanoid patient";
+            patientHumanoid.traverse((child) => {
+              if (child.isBone) {
+                const boneName = normalizeHumanoidBoneName(child.name);
+                patientBones[boneName] = child;
+                return;
+              }
+              if (!child.isMesh && !child.isSkinnedMesh) return;
+              child.castShadow = true;
+              child.receiveShadow = true;
+              registerInteractive(child, "patient");
+              const materials = Array.isArray(child.material) ? child.material : [child.material];
+              materials.forEach((material) => {
+                if (!material) return;
+                const name = `${child.name} ${material.name || ""}`.toLowerCase();
+                configurePatientMaterial(material, name);
+              });
+            });
+
+            const box = new THREE.Box3().setFromObject(patientHumanoid);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            const height = Math.max(size.x, size.y, size.z, 0.01);
+            patientHumanoid.position.sub(center);
+            patientHumanoid.scale.setScalar(1.72 / height);
+            patientModelAxisCorrection.add(patientHumanoid);
+
+            applySupinePatientPose();
+          },
+          undefined,
+          (error) => {
+            console.warn("KHSIM patient GLTF failed to load", error);
+          },
+        );
+
+        window.update3D = function update3D(nextState, nextVitals = null) {
+          currentPain = nextState?.patientStatus?.pain ?? 0;
+          latestVitals = nextVitals;
+          latestPatientState = nextState;
+          latestUrgency = nextState?.urgency || latestUrgency;
+          latestCueProfile = cueProfileFromState(nextState, nextVitals);
+          bed.material.color.copy(latestUrgency.level === "critical" ? new THREE.Color(0xff4d4d) : currentPain >= 8 ? painAlertBedColor : normalBedColor);
+          patientModelSkinMaterials.forEach((material) => {
+            const baseColor = material.userData.basePatientColor || patientSupineBase.skinColor;
+            material.color.copy(baseColor).lerp(patientSupineBase.pallorColor, latestCueProfile.pallor * 0.18);
+          });
+          patientModelClothMaterials.forEach((material) => {
+            if (!material.color) return;
+            material.color.lerp(new THREE.Color(latestCueProfile.cueLevel >= 2 ? 0xb8d0d2 : 0xd0dcda), 0.025);
+          });
+          clinicalLight.color.set(latestCueProfile.cueLevel >= 2 ? 0xffd0b0 : 0xfff3dd);
+          clinicalLight.intensity = 0.12 + latestCueProfile.alarm * 0.34;
+          monitorGlowLight.intensity = is3DMonitorActive ? 0.18 + latestCueProfile.alarm * 0.18 : 0.035;
+          bedsideFillLight.intensity = 0.08 + latestCueProfile.calm * 0.05;
+
+          const oxygenVisible = Boolean(nextState?.oxygenApplied);
+          oxygenMask.material.opacity = oxygenVisible ? 0.34 : 0.0;
+          oxygenTube.material.opacity = oxygenVisible ? 0.58 : 0.0;
+
+          const leadsVisible = Boolean(nextState?.monitorOn || nextState?.ekgAttached);
+          ecgPads.forEach((pad) => {
+            pad.material.opacity = leadsVisible ? 0.82 : 0.0;
+          });
+          ecgLeadLines.forEach((line) => {
+            line.material.opacity = leadsVisible ? 0.72 : 0.0;
+          });
+
+          if (typeof monitorScreenMaterial !== "undefined") {
+            is3DMonitorActive = Boolean(nextState?.monitorOn || nextState?.ekgAttached);
+            drawMonitorTexture(is3DMonitorActive);
+          }
+        };
+
+        const oxygenMaskMaterial = new THREE.MeshBasicMaterial({
+          color: 0xdff7ff,
+          transparent: true,
+          opacity: 0.0,
+          depthWrite: false,
+        });
+        const oxygenMask = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 12), oxygenMaskMaterial);
+        oxygenMask.scale.set(1.05, 0.5, 0.78);
+        oxygenMask.position.set(-1.24, 1.39, -0.35);
+        oxygenMask.rotation.z = -0.12;
+        scene.add(oxygenMask);
+
+        const oxygenTube = makeTube([
+          [-1.1, 1.48, -0.1],
+          [-0.78, 1.22, 0.52],
+          [0.22, 1.05, 0.86],
+          [1.75, 1.03, 1.22],
+        ], 0xc7f3ff, 0.01, 0.0);
+
+        const ecgLeadMaterial = new THREE.MeshBasicMaterial({ color: 0xf7fbff, transparent: true, opacity: 0.0 });
+        const ecgPads = [
+          [-0.96, 1.57, -0.05],
+          [-0.72, 1.57, -0.58],
+          [-0.54, 1.52, -0.2],
+        ].map(([x, y, z]) => {
+          const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.012, 18), ecgLeadMaterial.clone());
+          pad.position.set(x, y, z);
+          pad.rotation.x = Math.PI / 2;
+          scene.add(pad);
+          return pad;
+        });
+        const ecgLeadLines = [
+          makeTube([[-0.96, 1.57, -0.05], [-0.56, 1.72, -0.84], [1.05, 1.68, -1.18], [2.25, 1.9, -1.26]], 0xe7edf2, 0.006, 0.0),
+          makeTube([[-0.72, 1.57, -0.58], [-0.38, 1.68, -0.92], [1.18, 1.72, -1.18], [2.25, 1.92, -1.26]], 0xe7edf2, 0.006, 0.0),
+          makeTube([[-0.54, 1.52, -0.2], [-0.24, 1.62, -0.74], [1.28, 1.72, -1.16], [2.25, 1.94, -1.26]], 0xe7edf2, 0.006, 0.0),
+        ];
+
+        const ivPoleMaterial = new THREE.MeshStandardMaterial({ color: 0xc7d0d6, metalness: 0.42, roughness: 0.3 });
+        const ivPole = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.62, 12), ivPoleMaterial);
+        ivPole.position.set(1.9, 1.63, 0.92);
+        ivPole.castShadow = true;
+        scene.add(ivPole);
+        const ivBag = new THREE.Mesh(
+          new THREE.BoxGeometry(0.18, 0.3, 0.055),
+          new THREE.MeshBasicMaterial({ color: 0xe9fbff, transparent: true, opacity: 0.38 }),
+        );
+        ivBag.position.set(1.9, 2.42, 0.92);
+        scene.add(ivBag);
+        const ivLine = makeTube([[1.9, 2.27, 0.92], [1.45, 1.83, 0.7], [0.55, 1.43, 0.5], [-0.02, 1.42, 0.46]], 0xe9fbff, 0.0055, 0.46);
+
+        const monitorCanvas = document.createElement("canvas");
+        monitorCanvas.width = 512;
+        monitorCanvas.height = 320;
+        const monitorCanvasContext = monitorCanvas.getContext("2d");
+        const monitorTexture = new THREE.CanvasTexture(monitorCanvas);
+        monitorTexture.colorSpace = THREE.SRGBColorSpace;
+
+        const monitorBodyMaterial = new THREE.MeshStandardMaterial({
+          color: 0x202b34,
+          roughness: 0.48,
+        });
+        const monitorScreenMaterial = new THREE.MeshBasicMaterial({
+          map: monitorTexture,
+          toneMapped: false,
+        });
+        const monitorStandMaterial = new THREE.MeshStandardMaterial({
+          color: 0x596771,
+          metalness: 0.25,
+          roughness: 0.42,
+        });
+
+        const monitor = roundedBox(1.05, 0.72, 0.18, 0.055, monitorBodyMaterial);
+        monitor.position.set(2.65, 1.95, -1.45);
+        monitor.castShadow = true;
+        scene.add(monitor);
+        registerInteractive(monitor, "monitor");
+
+        const monitorScreen = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.82, 0.5),
+          monitorScreenMaterial,
+        );
+        monitorScreen.position.set(2.65, 1.95, -1.34);
+        scene.add(monitorScreen);
+        registerInteractive(monitorScreen, "monitor");
+        drawMonitorTexture(false);
+
+        const monitorAlarmMaterial = new THREE.MeshBasicMaterial({
+          color: 0xffd166,
+          transparent: true,
+          opacity: 0.18,
+        });
+        const monitorAlarmBeacon = new THREE.Mesh(new THREE.SphereGeometry(0.06, 18, 12), monitorAlarmMaterial);
+        monitorAlarmBeacon.position.set(3.11, 2.32, -1.32);
+        scene.add(monitorAlarmBeacon);
+
+        const monitorNeck = roundedBox(0.12, 0.58, 0.12, 0.028, monitorStandMaterial);
+        monitorNeck.position.set(2.65, 1.32, -1.45);
+        monitorNeck.castShadow = true;
+        scene.add(monitorNeck);
+
+        const monitorBase = roundedBox(0.72, 0.08, 0.5, 0.04, monitorStandMaterial);
+        monitorBase.position.set(2.65, 1.0, -1.45);
+        monitorBase.castShadow = true;
+        scene.add(monitorBase);
+
+
+
+        const chartBoard = roundedBox(1.25, 0.86, 0.08, 0.045, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 }));
+        chartBoard.position.set(-2.9, 1.85, -3.08);
+        chartBoard.castShadow = true;
+        scene.add(chartBoard);
+        registerInteractive(chartBoard, "chart");
+
+        const chartHeader = new THREE.Mesh(
+          new THREE.BoxGeometry(1.05, 0.12, 0.085),
+          new THREE.MeshStandardMaterial({ color: 0x147d7e, roughness: 0.5 }),
+        );
+        chartHeader.position.set(-2.9, 2.16, -3.02);
+        scene.add(chartHeader);
+        registerInteractive(chartHeader, "chart");
+
+        const medCart = roundedBox(0.72, 0.82, 0.54, 0.055, new THREE.MeshStandardMaterial({ color: 0xf2f5f7, roughness: 0.58 }));
+        medCart.position.set(3.25, 0.74, 0.55);
+        medCart.castShadow = true;
+        scene.add(medCart);
+        registerInteractive(medCart, "medication");
+
+        const medCartTop = roundedBox(0.84, 0.08, 0.64, 0.04, new THREE.MeshStandardMaterial({ color: 0x2f6fbb, roughness: 0.42 }));
+        medCartTop.position.set(3.25, 1.2, 0.55);
+        medCartTop.castShadow = true;
+        scene.add(medCartTop);
+        registerInteractive(medCartTop, "medication");
+
+        [0.92, 0.74, 0.56].forEach((y, index) => {
+          const drawer = new THREE.Mesh(
+            new THREE.BoxGeometry(0.62, 0.035, 0.045),
+            new THREE.MeshStandardMaterial({ color: index === 0 ? 0xdce7ee : 0xffffff, roughness: 0.52 }),
+          );
+          drawer.position.set(3.25, y, 0.835);
+          scene.add(drawer);
+          const handle = new THREE.Mesh(
+            new THREE.BoxGeometry(0.24, 0.018, 0.025),
+            new THREE.MeshStandardMaterial({ color: 0x6f7d86, metalness: 0.2, roughness: 0.4 }),
+          );
+          handle.position.set(3.25, y, 0.865);
+          scene.add(handle);
+        });
+
+        const syringeTray = new THREE.Mesh(
+          new THREE.BoxGeometry(0.34, 0.025, 0.13),
+          new THREE.MeshStandardMaterial({ color: 0xd9eef3, roughness: 0.44 }),
+        );
+        syringeTray.position.set(3.05, 1.255, 0.68);
+        syringeTray.rotation.y = 0.12;
+        scene.add(syringeTray);
+
+        const communicationBase = new THREE.Mesh(
+          new THREE.BoxGeometry(0.74, 0.08, 0.46),
+          new THREE.MeshStandardMaterial({ color: 0x20313d, roughness: 0.48 }),
+        );
+        communicationBase.position.set(1.85, 1.05, 1.15);
+        communicationBase.rotation.y = -0.18;
+        communicationBase.castShadow = true;
+        scene.add(communicationBase);
+        registerInteractive(communicationBase, "communication");
+
+        const communicationScreen = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.58, 0.28),
+          new THREE.MeshBasicMaterial({ color: 0x0f5664 }),
+        );
+        communicationScreen.position.set(1.85, 1.1, 1.16);
+        communicationScreen.rotation.x = -Math.PI / 2;
+        communicationScreen.rotation.z = 0.18;
+        scene.add(communicationScreen);
+        registerInteractive(communicationScreen, "communication");
+
+        const laptopBaseMaterial = new THREE.MeshStandardMaterial({ color: 0x263642, roughness: 0.5 });
+        const laptopScreenMaterial = new THREE.MeshBasicMaterial({ color: 0x0b2f3a });
+        const laptopGlowMaterial = new THREE.MeshBasicMaterial({ color: 0x67e8f9, transparent: true, opacity: 0.38 });
+
+        const laptopBase = new THREE.Mesh(
+          new THREE.BoxGeometry(0.98, 0.08, 0.62),
+          laptopBaseMaterial,
+        );
+        laptopBase.position.set(-2.2, 1.03, 0.9);
+        laptopBase.rotation.y = -0.28;
+        laptopBase.castShadow = true;
+        scene.add(laptopBase);
+        registerInteractive(laptopBase, "emr");
+
+        const laptopScreen = new THREE.Mesh(
+          new THREE.BoxGeometry(0.9, 0.58, 0.06),
+          laptopBaseMaterial,
+        );
+        laptopScreen.position.set(-2.28, 1.36, 0.65);
+        laptopScreen.rotation.x = -0.28;
+        laptopScreen.rotation.y = -0.28;
+        laptopScreen.castShadow = true;
+        scene.add(laptopScreen);
+        registerInteractive(laptopScreen, "emr");
+
+        const laptopDisplay = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.72, 0.42),
+          laptopScreenMaterial,
+        );
+        laptopDisplay.position.set(-2.19, 1.36, 0.69);
+        laptopDisplay.rotation.x = -0.28;
+        laptopDisplay.rotation.y = -0.28;
+        scene.add(laptopDisplay);
+        registerInteractive(laptopDisplay, "emr");
+
+        const laptopHotspot = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.42, 32), laptopGlowMaterial);
+        laptopHotspot.position.set(-2.19, 1.08, 1.22);
+        laptopHotspot.rotation.x = -Math.PI / 2;
+        scene.add(laptopHotspot);
+        registerInteractive(laptopHotspot, "emr");
+
+        const patientHotspot = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.82, 36), hotspotMaterial);
+        patientHotspot.position.set(-0.68, 1.02, 0.82);
+        patientHotspot.rotation.x = -Math.PI / 2;
+        scene.add(patientHotspot);
+        registerInteractive(patientHotspot, "patient");
+
+        function resizeRenderer() {
+          const width = container.clientWidth || 1;
+          const height = container.clientHeight || 1;
+
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+          renderer.setSize(width, height, false);
+        }
+
+        window.addEventListener("resize", resizeRenderer);
+        resizeRenderer();
+
+        function animate() {
+          const now = performance.now();
+          const time = now * 0.012;
+          const cues = latestCueProfile;
+          const urgencyShake = latestUrgency.level === "critical" ? 0.04 : latestUrgency.level === "severe" ? 0.02 : 0;
+          const restPhase = Math.sin(time * (1.1 + cues.restlessness));
+          const restlessPause = 0.55 + Math.max(0, Math.sin(time * 0.31)) * 0.45;
+          const restlessnessMotion = restPhase * restlessPause * (0.012 + cues.restlessness * 0.05 + urgencyShake);
+          const shoulderTension = Math.sin(time * 0.7) * cues.anxiety * 0.025;
+          const breathingRate = 0.002 + cues.breathingEffort * 0.0055 - cues.calm * 0.00045;
+          const breathWave = Math.sin(now * breathingRate);
+          const breathIrregularity = Math.sin(now * 0.011 + Math.sin(now * 0.0017) * 2) * cues.breathingEffort * 0.018;
+          const breathingMotion = breathWave * (0.014 + cues.breathingEffort * 0.04 - cues.calm * 0.004) + breathIrregularity;
+          const chestExpansion = Math.max(0, breathWave) * (0.055 + cues.breathingEffort * 0.11);
+          const responsivenessSlump = cues.responsiveness * 0.105;
+          const calmSettling = cues.calm * 0.02;
+          const alarmPulse = is3DMonitorActive ? (0.45 + Math.sin(now * (0.005 + cues.alarm * 0.008)) * 0.35) * cues.alarm : 0;
+          const patientBaseScale = patientSupineBase.scale;
+          patientModelRoot.position.x = patientSupineBase.position.x + restlessnessMotion * 0.55;
+          patientModelRoot.position.y = patientSupineBase.position.y + breathingMotion * 0.28 - responsivenessSlump * 0.5 + calmSettling;
+          patientModelRoot.position.z = patientSupineBase.position.z + Math.sin(time * 0.46) * cues.restlessness * 0.006;
+          patientModelRoot.rotation.x = patientSupineBase.rotation.x;
+          patientModelRoot.rotation.y = patientSupineBase.rotation.y + Math.sin(time * 0.33) * cues.restlessness * 0.012;
+          patientModelRoot.rotation.z = patientSupineBase.rotation.z + restlessnessMotion * 0.05 + shoulderTension * 0.08;
+          patientModelRoot.scale.set(
+            patientBaseScale * (1 + chestExpansion * 0.025),
+            patientBaseScale * (1 + chestExpansion * 0.075),
+            patientBaseScale * (1 + chestExpansion * 0.035),
+          );
+          patientGownGroup.position.x = restlessnessMotion * 0.9;
+          patientGownGroup.position.y = breathingMotion * 0.22 - responsivenessSlump * 0.45 + calmSettling;
+          patientGownGroup.position.z = Math.sin(time * 0.46) * cues.restlessness * 0.01;
+          patientGownGroup.scale.setScalar(1 + chestExpansion * 0.018);
+          if (patientBones.Spine2?.userData.restRotation) {
+            patientBones.Spine2.rotation.copy(patientBones.Spine2.userData.restRotation);
+            patientBones.Spine2.rotation.x += breathingMotion * 0.9 - cues.responsiveness * 0.04;
+            patientBones.Spine2.scale.copy(patientBones.Spine2.userData.restScale);
+            patientBones.Spine2.scale.x *= 1 + chestExpansion * 0.08;
+            patientBones.Spine2.scale.z *= 1 + chestExpansion * 0.045;
+          }
+          if (patientBones.Spine1?.userData.restRotation) {
+            patientBones.Spine1.rotation.copy(patientBones.Spine1.userData.restRotation);
+            patientBones.Spine1.rotation.x += breathingMotion * 0.55;
+          }
+          if (patientBones.Head?.userData.restRotation) {
+            patientBones.Head.rotation.copy(patientBones.Head.userData.restRotation);
+            patientBones.Head.rotation.z += restlessnessMotion * 1.8 - cues.responsiveness * 0.035;
+            patientBones.Head.rotation.x += breathingMotion * 0.28;
+          }
+          patientHeadAnchor.position.set(
+            patientHeadAnchorBase.x + restlessnessMotion * 0.55,
+            patientHeadAnchorBase.y + breathingMotion * 0.7 - responsivenessSlump,
+            patientHeadAnchorBase.z,
+          );
+          patientHairCap.position.x = patientHeadAnchor.position.x - 0.01;
+          patientHairCap.position.y = patientHeadAnchor.position.y + 0.03;
+          patientHairCap.position.z = patientHeadAnchor.position.z;
+
+          oxygenMask.position.x = patientHeadAnchor.position.x - 0.03 + restlessnessMotion * 0.12;
+          oxygenMask.position.y = patientHeadAnchor.position.y - 0.03 + breathingMotion * 0.24;
+          oxygenMask.position.z = patientHeadAnchor.position.z;
+          oxygenMask.rotation.z = -0.12 + patientModelRoot.rotation.z * 0.08;
+          ecgPads.forEach((pad, index) => {
+            pad.position.y = [1.57, 1.57, 1.52][index] + breathingMotion * (0.38 + index * 0.05);
+            pad.rotation.z = restlessnessMotion * 0.22;
+          });
+          ivBag.position.y = 2.42 + Math.sin(time * 0.18) * 0.006;
+          monitorAlarmBeacon.material.opacity = 0.08 + alarmPulse * 0.74;
+          monitorAlarmBeacon.material.color.set(latestUrgency.level === "critical" ? 0xff4d4d : 0xffd166);
+          monitorAlarmBeacon.scale.setScalar(1 + alarmPulse * 1.4);
+          monitorScreen.scale.set(1 + alarmPulse * 0.012, 1 + alarmPulse * 0.012, 1);
+          monitorGlowLight.intensity = (is3DMonitorActive ? 0.16 : 0.03) + alarmPulse * 0.22;
+          clinicalLight.intensity = 0.12 + cues.alarm * 0.28 + alarmPulse * 0.16;
+
+          if (is3DMonitorActive) {
+            drawMonitorTexture(true);
+            playAlarmTone(cues.alarm, latestUrgency.level);
+          }
+
+          const cameraDrift = 0.008 + cues.calm * 0.003;
+          camera.position.set(
+            baseCameraPosition.x + Math.sin(time * 0.08) * cameraDrift,
+            baseCameraPosition.y + Math.sin(time * 0.11 + 1.4) * cameraDrift * 0.55,
+            baseCameraPosition.z + Math.cos(time * 0.07) * cameraDrift,
+          );
+          camera.lookAt(
+            baseCameraTarget.x + Math.sin(time * 0.06) * 0.01,
+            baseCameraTarget.y + Math.sin(time * 0.05 + 0.6) * 0.006,
+            baseCameraTarget.z,
+          );
+
+          renderer.render(scene, camera);
+          requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        if (typeof state !== "undefined") {
+          window.update3D(state);
+        }
+      }
+    </script>
+    <script src="./script.js?v=prototype4-medux1"></script>
+  </body>
+</html>
