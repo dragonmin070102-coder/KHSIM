@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>KHSIM</title>
-    <link rel="stylesheet" href="./styles.css?v=prototype4-medux1" />
+    <link rel="stylesheet" href="./styles.css?v=prototype4-device3" />
   </head>
   <body>
     <main class="app">
@@ -22,9 +22,6 @@
 
         <div class="room">
           <div id="three-container" aria-label="3D 병실 환경"></div>
-          <button type="button" class="hud-visibility-toggle" id="hud-visibility-toggle" aria-pressed="false" aria-label="HUD 클러스터 접기">
-            <span>HUD</span>
-          </button>
           <div class="interaction-hint" id="interaction-hint">환자와 먼저 대화해보세요.</div>
           <button type="button" class="hint-card-toggle" data-floating-card-toggle="hint" aria-controls="interaction-hint" aria-label="침상 힌트 접기">Hint</button>
           <div class="interaction-menu" id="interaction-menu" hidden></div>
@@ -180,6 +177,17 @@
         const camera = new THREE.PerspectiveCamera(39, 1, 0.1, 100);
         const baseCameraPosition = new THREE.Vector3(3.45, 2.35, 4.35);
         const baseCameraTarget = new THREE.Vector3(0.05, 1.18, -0.32);
+        const cameraPan = new THREE.Vector2(0, 0);
+        const pointerDragState = {
+          active: false,
+          pointerId: null,
+          startX: 0,
+          startY: 0,
+          lastX: 0,
+          lastY: 0,
+          moved: false,
+        };
+        let suppressClinicalClick = false;
         camera.position.copy(baseCameraPosition);
         camera.lookAt(baseCameraTarget);
 
@@ -190,6 +198,7 @@
         renderer.toneMappingExposure = 1.0;
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.domElement.classList.add("three-room-canvas");
         container.append(renderer.domElement);
 
         const ambientLight = new THREE.AmbientLight(0xf4f8fb, 0.72);
@@ -221,7 +230,7 @@
         scene.add(clinicalLight);
 
         const monitorGlowLight = new THREE.PointLight(0x40f39d, 0.0, 3.1);
-        monitorGlowLight.position.set(2.42, 1.95, -1.08);
+        monitorGlowLight.position.set(-2.34, 1.72, -0.86);
         scene.add(monitorGlowLight);
 
         const bedsideFillLight = new THREE.PointLight(0xb7dcff, 0.08, 4.2);
@@ -525,6 +534,7 @@
           chart: "차트: orders/labs",
           medication: "투약 카트: 준비와 확인",
           communication: "의사 연락: SBAR",
+          scenePan: "화면을 드래그해 병실 시야를 이동합니다.",
         };
         const hotspotMaterial = new THREE.MeshBasicMaterial({
           color: 0x147d7e,
@@ -567,8 +577,9 @@
         }
 
         function setInteractionHint(target = null) {
-          if (!interactionHint) return;
-          interactionHint.textContent = target
+          const hint = document.querySelector("#interaction-hint");
+          if (!hint) return;
+          hint.textContent = target
             ? targetLabels[target]
             : "환자와 먼저 대화해보세요.";
         }
@@ -587,18 +598,82 @@
             ?.object?.userData?.clinicalTarget ?? null;
         }
 
+        function updateCameraPan(deltaX, deltaY) {
+          const width = renderer.domElement.clientWidth || 1;
+          const height = renderer.domElement.clientHeight || 1;
+          cameraPan.x = THREE.MathUtils.clamp(cameraPan.x - (deltaX / width) * 1.15, -0.58, 0.42);
+          cameraPan.y = THREE.MathUtils.clamp(cameraPan.y + (deltaY / height) * 0.62, -0.24, 0.28);
+        }
+
+        renderer.domElement.addEventListener("pointerdown", (event) => {
+          if (event.button !== undefined && event.button !== 0) return;
+          pointerDragState.active = true;
+          pointerDragState.pointerId = event.pointerId;
+          pointerDragState.startX = event.clientX;
+          pointerDragState.startY = event.clientY;
+          pointerDragState.lastX = event.clientX;
+          pointerDragState.lastY = event.clientY;
+          pointerDragState.moved = false;
+          renderer.domElement.setPointerCapture?.(event.pointerId);
+        });
+
         renderer.domElement.addEventListener("pointermove", (event) => {
+          if (pointerDragState.active && pointerDragState.pointerId === event.pointerId) {
+            const totalX = event.clientX - pointerDragState.startX;
+            const totalY = event.clientY - pointerDragState.startY;
+            const didMove = Math.hypot(totalX, totalY) > 8;
+            if (didMove) {
+              updateCameraPan(event.clientX - pointerDragState.lastX, event.clientY - pointerDragState.lastY);
+              pointerDragState.moved = true;
+              suppressClinicalClick = true;
+              renderer.domElement.style.cursor = "grabbing";
+              setInteractionHint("scenePan");
+              event.preventDefault();
+            }
+            pointerDragState.lastX = event.clientX;
+            pointerDragState.lastY = event.clientY;
+            if (didMove) return;
+          }
           const target = findInteractiveTarget(event);
           renderer.domElement.style.cursor = target ? "pointer" : "default";
           setInteractionHint(target);
         });
 
+        renderer.domElement.addEventListener("pointerup", (event) => {
+          if (pointerDragState.pointerId !== event.pointerId) return;
+          renderer.domElement.releasePointerCapture?.(event.pointerId);
+          pointerDragState.active = false;
+          pointerDragState.pointerId = null;
+          renderer.domElement.style.cursor = "default";
+          if (pointerDragState.moved) {
+            window.setTimeout(() => {
+              suppressClinicalClick = false;
+            }, 0);
+          }
+        });
+
+        renderer.domElement.addEventListener("pointercancel", (event) => {
+          if (pointerDragState.pointerId !== event.pointerId) return;
+          renderer.domElement.releasePointerCapture?.(event.pointerId);
+          pointerDragState.active = false;
+          pointerDragState.pointerId = null;
+          suppressClinicalClick = false;
+        });
+
         renderer.domElement.addEventListener("pointerleave", () => {
+          if (pointerDragState.active) return;
           renderer.domElement.style.cursor = "default";
           setInteractionHint();
         });
 
         renderer.domElement.addEventListener("click", (event) => {
+          if (suppressClinicalClick || pointerDragState.moved) {
+            event.preventDefault();
+            event.stopPropagation();
+            suppressClinicalClick = false;
+            pointerDragState.moved = false;
+            return;
+          }
           const target = findInteractiveTarget(event);
           if (target) {
             event.stopPropagation();
@@ -668,6 +743,59 @@
             const pointY = y + wave * amplitude;
             if (x === 0) monitorCanvasContext.moveTo(x, pointY);
             else monitorCanvasContext.lineTo(x, pointY);
+          }
+
+          monitorCanvasContext.stroke();
+        }
+
+        function plethWaveShape(phase) {
+          if (phase < 0.08) return phase / 0.08;
+          if (phase < 0.18) return 1 - (phase - 0.08) / 0.1 * 0.18;
+          if (phase < 0.32) return 0.82 - (phase - 0.18) / 0.14 * 0.3;
+          if (phase < 0.4) return 0.52 - Math.sin((phase - 0.32) / 0.08 * Math.PI) * 0.16;
+          if (phase < 0.54) return 0.44 + Math.sin((phase - 0.4) / 0.14 * Math.PI) * 0.12;
+          return Math.max(0, 0.44 * (1 - (phase - 0.54) / 0.46));
+        }
+
+        function drawPlethWaveform(baseline, offset, color, amplitude = 25, beatWidth = 78) {
+          const spo2 = Number(latestVitals?.spo2 || 98);
+          const perfusionLoss = THREE.MathUtils.clamp((94 - spo2) / 10, 0, 0.65);
+          const effectiveAmplitude = amplitude * (1 - perfusionLoss * 0.45);
+
+          monitorCanvasContext.strokeStyle = color;
+          monitorCanvasContext.lineWidth = 3.4;
+          monitorCanvasContext.lineJoin = "round";
+          monitorCanvasContext.shadowColor = color;
+          monitorCanvasContext.shadowBlur = 5;
+          monitorCanvasContext.beginPath();
+
+          for (let x = -beatWidth; x <= monitorCanvas.width + beatWidth; x += 4) {
+            const phase = (((x + offset) % beatWidth) + beatWidth) % beatWidth / beatWidth;
+            const shape = plethWaveShape(phase);
+            const respiratoryVariation = Math.sin((x + offset) * 0.018) * (2.2 + latestCueProfile.breathingEffort * 1.4);
+            const artifact = Math.sin((x + offset) * 0.31) * perfusionLoss * 3.2;
+            const y = baseline - shape * effectiveAmplitude + respiratoryVariation + artifact;
+            if (x <= -beatWidth) monitorCanvasContext.moveTo(x, y);
+            else monitorCanvasContext.lineTo(x, y);
+          }
+
+          monitorCanvasContext.stroke();
+          monitorCanvasContext.shadowBlur = 0;
+        }
+
+        function drawRespWaveform(baseline, offset, color, amplitude = 18, breathWidth = 148) {
+          monitorCanvasContext.strokeStyle = color;
+          monitorCanvasContext.lineWidth = 3;
+          monitorCanvasContext.lineJoin = "round";
+          monitorCanvasContext.beginPath();
+
+          for (let x = -breathWidth; x <= monitorCanvas.width + breathWidth; x += 5) {
+            const phase = (((x + offset) % breathWidth) + breathWidth) % breathWidth / breathWidth;
+            const inhale = phase < 0.42 ? Math.sin((phase / 0.42) * Math.PI * 0.5) : Math.cos(((phase - 0.42) / 0.58) * Math.PI * 0.5);
+            const effort = latestCueProfile.breathingEffort || 0;
+            const y = baseline - inhale * amplitude + Math.sin((x + offset) * 0.035) * effort * 2.8;
+            if (x <= -breathWidth) monitorCanvasContext.moveTo(x, y);
+            else monitorCanvasContext.lineTo(x, y);
           }
 
           monitorCanvasContext.stroke();
@@ -770,7 +898,7 @@
           monitorCanvasContext.fillStyle = "#9fb5bd";
           monitorCanvasContext.font = "900 13px Menlo, Consolas, monospace";
           monitorCanvasContext.fillText("ECG II", 18, 48);
-          monitorCanvasContext.fillText("PLETH", 18, 142);
+          monitorCanvasContext.fillText("SpO2 PLETH", 18, 142);
           monitorCanvasContext.fillText("RESP", 18, 228);
 
           monitorCanvasContext.save();
@@ -778,13 +906,15 @@
           monitorCanvasContext.rect(58, 42, waveRight - 70, 250);
           monitorCanvasContext.clip();
           if (active) {
+            const hrValue = Number(vitals.hr) || 96;
+            const beatWidth = THREE.MathUtils.clamp(7200 / hrValue, 46, 96);
             drawEcgWaveform((time * (0.09 + latestCueProfile.rhythmInstability * 0.035)) % 512, 92);
-            drawVitalsStrip(176, (time * (0.05 + latestCueProfile.alarm * 0.018)) % 512, spo2Color, 24 + latestCueProfile.alarm * 5, 88);
-            drawVitalsStrip(248, (time * (0.035 + latestCueProfile.breathingEffort * 0.018)) % 512, rrColor, 18 + latestCueProfile.breathingEffort * 5, 128);
+            drawPlethWaveform(178, (time * (0.09 + latestCueProfile.rhythmInstability * 0.018)) % 512, spo2Color, 24 + latestCueProfile.alarm * 4, beatWidth);
+            drawRespWaveform(250, (time * (0.033 + latestCueProfile.breathingEffort * 0.016)) % 512, rrColor, 18 + latestCueProfile.breathingEffort * 5, 150);
           } else {
             drawVitalsStrip(92, 0, "#24423d", 8, 88);
-            drawVitalsStrip(176, 0, "#24423d", 8, 88);
-            drawVitalsStrip(248, 0, "#24423d", 8, 128);
+            drawPlethWaveform(178, 0, "#24423d", 8, 78);
+            drawRespWaveform(250, 0, "#24423d", 8, 150);
           }
           monitorCanvasContext.restore();
 
@@ -1198,7 +1328,8 @@
         });
 
         const monitor = roundedBox(1.05, 0.72, 0.18, 0.055, monitorBodyMaterial);
-        monitor.position.set(2.65, 1.95, -1.45);
+        monitor.position.set(-2.42, 1.68, -1.05);
+        monitor.rotation.y = 0.32;
         monitor.castShadow = true;
         scene.add(monitor);
         registerInteractive(monitor, "monitor");
@@ -1207,7 +1338,8 @@
           new THREE.PlaneGeometry(0.82, 0.5),
           monitorScreenMaterial,
         );
-        monitorScreen.position.set(2.65, 1.95, -1.34);
+        monitorScreen.position.set(-2.39, 1.68, -0.91);
+        monitorScreen.rotation.y = 0.32;
         scene.add(monitorScreen);
         registerInteractive(monitorScreen, "monitor");
         drawMonitorTexture(false);
@@ -1218,16 +1350,18 @@
           opacity: 0.18,
         });
         const monitorAlarmBeacon = new THREE.Mesh(new THREE.SphereGeometry(0.06, 18, 12), monitorAlarmMaterial);
-        monitorAlarmBeacon.position.set(3.11, 2.32, -1.32);
+        monitorAlarmBeacon.position.set(-1.98, 2.02, -0.79);
         scene.add(monitorAlarmBeacon);
 
         const monitorNeck = roundedBox(0.12, 0.58, 0.12, 0.028, monitorStandMaterial);
-        monitorNeck.position.set(2.65, 1.32, -1.45);
+        monitorNeck.position.set(-2.42, 1.06, -1.05);
+        monitorNeck.rotation.y = 0.32;
         monitorNeck.castShadow = true;
         scene.add(monitorNeck);
 
         const monitorBase = roundedBox(0.72, 0.08, 0.5, 0.04, monitorStandMaterial);
-        monitorBase.position.set(2.65, 1.0, -1.45);
+        monitorBase.position.set(-2.42, 0.76, -1.05);
+        monitorBase.rotation.y = 0.32;
         monitorBase.castShadow = true;
         scene.add(monitorBase);
 
@@ -1247,100 +1381,367 @@
         scene.add(chartHeader);
         registerInteractive(chartHeader, "chart");
 
-        const medCart = roundedBox(0.72, 0.82, 0.54, 0.055, new THREE.MeshStandardMaterial({ color: 0xf2f5f7, roughness: 0.58 }));
-        medCart.position.set(3.25, 0.74, 0.55);
-        medCart.castShadow = true;
-        scene.add(medCart);
-        registerInteractive(medCart, "medication");
+        const cartGroup = new THREE.Group();
+        cartGroup.position.set(-2.35, 0.14, 0.72);
+        cartGroup.rotation.y = 0.18;
+        cartGroup.scale.setScalar(0.86);
+        scene.add(cartGroup);
 
-        const medCartTop = roundedBox(0.84, 0.08, 0.64, 0.04, new THREE.MeshStandardMaterial({ color: 0x2f6fbb, roughness: 0.42 }));
-        medCartTop.position.set(3.25, 1.2, 0.55);
-        medCartTop.castShadow = true;
-        scene.add(medCartTop);
-        registerInteractive(medCartTop, "medication");
+        const cartFrameMaterial = new THREE.MeshStandardMaterial({ color: 0xe9f0f3, roughness: 0.55, metalness: 0.04 });
+        const cartTopMaterial = new THREE.MeshStandardMaterial({ color: 0xf7fafb, roughness: 0.5 });
+        const cartAccentMaterial = new THREE.MeshStandardMaterial({ color: 0x147d7e, roughness: 0.42 });
+        const cartDarkMaterial = new THREE.MeshStandardMaterial({ color: 0x26323a, roughness: 0.48, metalness: 0.12 });
+        const cartMetalMaterial = new THREE.MeshStandardMaterial({ color: 0x8a9aa3, roughness: 0.34, metalness: 0.38 });
 
-        [0.92, 0.74, 0.56].forEach((y, index) => {
-          const drawer = new THREE.Mesh(
-            new THREE.BoxGeometry(0.62, 0.035, 0.045),
-            new THREE.MeshStandardMaterial({ color: index === 0 ? 0xdce7ee : 0xffffff, roughness: 0.52 }),
-          );
-          drawer.position.set(3.25, y, 0.835);
-          scene.add(drawer);
-          const handle = new THREE.Mesh(
-            new THREE.BoxGeometry(0.24, 0.018, 0.025),
-            new THREE.MeshStandardMaterial({ color: 0x6f7d86, metalness: 0.2, roughness: 0.4 }),
-          );
-          handle.position.set(3.25, y, 0.865);
-          scene.add(handle);
+        const cartBase = roundedBox(0.96, 0.1, 0.62, 0.06, cartDarkMaterial);
+        cartBase.position.set(0, 0.16, 0);
+        cartBase.castShadow = true;
+        cartGroup.add(cartBase);
+        registerInteractive(cartBase, "medication");
+
+        const cartColumn = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.88, 18), cartMetalMaterial);
+        cartColumn.position.set(-0.28, 0.66, -0.08);
+        cartColumn.castShadow = true;
+        cartGroup.add(cartColumn);
+
+        const cartDrawerStack = roundedBox(0.58, 0.58, 0.42, 0.045, cartFrameMaterial);
+        cartDrawerStack.position.set(0.18, 0.62, 0.02);
+        cartDrawerStack.castShadow = true;
+        cartDrawerStack.receiveShadow = true;
+        cartGroup.add(cartDrawerStack);
+        registerInteractive(cartDrawerStack, "medication");
+
+        [0.78, 0.62, 0.46].forEach((y, index) => {
+          const drawer = roundedBox(0.5, 0.095, 0.026, 0.012, new THREE.MeshStandardMaterial({ color: index === 0 ? 0xdce8ee : 0xffffff, roughness: 0.52 }));
+          drawer.position.set(0.18, y, 0.245);
+          cartGroup.add(drawer);
+          const handle = roundedBox(0.18, 0.02, 0.018, 0.006, cartMetalMaterial);
+          handle.position.set(0.18, y, 0.268);
+          cartGroup.add(handle);
         });
 
-        const syringeTray = new THREE.Mesh(
-          new THREE.BoxGeometry(0.34, 0.025, 0.13),
-          new THREE.MeshStandardMaterial({ color: 0xd9eef3, roughness: 0.44 }),
+        const sideBin = roundedBox(0.18, 0.3, 0.34, 0.035, new THREE.MeshStandardMaterial({ color: 0xdfe9ed, roughness: 0.58 }));
+        sideBin.position.set(-0.25, 0.6, 0.16);
+        sideBin.castShadow = true;
+        cartGroup.add(sideBin);
+        registerInteractive(sideBin, "medication");
+
+        const cartWorkSurface = roundedBox(0.98, 0.075, 0.68, 0.045, cartTopMaterial);
+        cartWorkSurface.position.set(0, 1.02, 0.02);
+        cartWorkSurface.castShadow = true;
+        cartWorkSurface.receiveShadow = true;
+        cartGroup.add(cartWorkSurface);
+        registerInteractive(cartWorkSurface, "medication");
+
+        const cartLip = roundedBox(0.9, 0.035, 0.035, 0.012, cartAccentMaterial);
+        cartLip.position.set(0, 1.08, -0.31);
+        cartGroup.add(cartLip);
+
+        const keyboardTray = roundedBox(0.62, 0.035, 0.28, 0.025, cartDarkMaterial);
+        keyboardTray.position.set(0.05, 0.91, 0.27);
+        keyboardTray.castShadow = true;
+        cartGroup.add(keyboardTray);
+        registerInteractive(keyboardTray, "emr");
+
+        [-0.38, 0.38].forEach((x) => {
+          [-0.22, 0.22].forEach((z) => {
+            const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.035, 16), cartDarkMaterial);
+            wheel.position.set(x, 0.08, z);
+            wheel.rotation.z = Math.PI / 2;
+            wheel.castShadow = true;
+            cartGroup.add(wheel);
+          });
+        });
+
+        const cartHandle = new THREE.Mesh(
+          new THREE.TorusGeometry(0.22, 0.012, 8, 30, Math.PI),
+          cartMetalMaterial,
         );
-        syringeTray.position.set(3.05, 1.255, 0.68);
+        cartHandle.position.set(-0.43, 0.94, -0.02);
+        cartHandle.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+        cartGroup.add(cartHandle);
+
+        const syringeTray = roundedBox(0.28, 0.025, 0.12, 0.015, new THREE.MeshStandardMaterial({ color: 0xd9eef3, roughness: 0.44 }));
+        syringeTray.position.set(0.32, 1.085, 0.18);
         syringeTray.rotation.y = 0.12;
-        scene.add(syringeTray);
+        cartGroup.add(syringeTray);
 
-        const communicationBase = new THREE.Mesh(
-          new THREE.BoxGeometry(0.74, 0.08, 0.46),
-          new THREE.MeshStandardMaterial({ color: 0x20313d, roughness: 0.48 }),
+        function makeDeviceScreenTexture(kind) {
+          const canvas = document.createElement("canvas");
+          canvas.width = kind === "laptop" ? 512 : 256;
+          canvas.height = kind === "laptop" ? 320 : 128;
+          const context = canvas.getContext("2d");
+          const drawRoundedRect = (x, y, width, height, radius) => {
+            context.beginPath();
+            context.moveTo(x + radius, y);
+            context.lineTo(x + width - radius, y);
+            context.quadraticCurveTo(x + width, y, x + width, y + radius);
+            context.lineTo(x + width, y + height - radius);
+            context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            context.lineTo(x + radius, y + height);
+            context.quadraticCurveTo(x, y + height, x, y + height - radius);
+            context.lineTo(x, y + radius);
+            context.quadraticCurveTo(x, y, x + radius, y);
+            context.closePath();
+          };
+          context.fillStyle = kind === "laptop" ? "#f7fbfd" : "#0a2830";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+
+          if (kind === "laptop") {
+            context.fillStyle = "#eaf2f5";
+            context.fillRect(0, 0, canvas.width, 54);
+            context.fillStyle = "#12202a";
+            context.font = "900 23px Arial";
+            context.fillText("KHSIM EMR", 24, 34);
+            context.fillStyle = "#147d7e";
+            context.fillRect(22, 70, 58, 30);
+            context.fillStyle = "#ecf7f7";
+            context.font = "900 15px Arial";
+            context.fillText("요약", 36, 91);
+            ["검사", "처방", "투약"].forEach((tab, index) => {
+              context.fillStyle = "#53616d";
+              context.font = "900 15px Arial";
+              context.fillText(tab, 112 + index * 68, 91);
+            });
+
+            context.fillStyle = "#ffffff";
+            context.strokeStyle = "#cbd6dd";
+            context.lineWidth = 2;
+            drawRoundedRect(22, 118, 212, 154, 10);
+            context.fill();
+            context.stroke();
+            context.fillStyle = "#1b2730";
+            context.font = "900 20px Arial";
+            context.fillText("Kim Hyun-soo", 42, 152);
+            context.font = "800 15px Arial";
+            context.fillStyle = "#52616d";
+            context.fillText("M / 62   ACS obs.", 42, 180);
+            context.fillText("HR 108   SpO2 94%", 42, 210);
+            context.fillText("BP 152/94", 42, 240);
+
+            context.fillStyle = "#ffffff";
+            context.strokeStyle = "#cbd6dd";
+            drawRoundedRect(258, 118, 226, 154, 10);
+            context.fill();
+            context.stroke();
+            context.fillStyle = "#147d7e";
+            context.font = "900 16px Arial";
+            context.fillText("Active Orders", 278, 150);
+            context.fillStyle = "#1b2730";
+            context.font = "800 14px Arial";
+            ["EKG continuous", "Nitroglycerin SL PRN", "Morphine IV PRN"].forEach((line, index) => {
+              context.fillText(line, 278, 180 + index * 30);
+            });
+            context.fillStyle = "rgba(20,125,126,0.16)";
+            context.fillRect(278, 238, 158, 18);
+            context.fillStyle = "rgba(47,111,187,0.16)";
+            context.fillRect(42, 250, 128, 10);
+          } else {
+            context.fillStyle = "#7dd3fc";
+            context.font = "800 22px Arial";
+            context.fillText("WARD CALL", 24, 36);
+            context.fillStyle = "rgba(125, 211, 252, 0.18)";
+            context.fillRect(24, 56, canvas.width - 48, 2);
+            context.fillStyle = "rgba(255,255,255,0.68)";
+            context.font = "800 18px Arial";
+            context.fillText("Nurse station", 22, 76);
+            context.fillStyle = "rgba(125, 211, 252, 0.22)";
+            context.fillRect(22, 92, 96, 18);
+          }
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.needsUpdate = true;
+          return texture;
+        }
+
+        const phoneGroup = new THREE.Group();
+        phoneGroup.position.set(1.85, 1.07, 1.15);
+        phoneGroup.rotation.y = -0.18;
+        scene.add(phoneGroup);
+
+        const phonePlastic = new THREE.MeshStandardMaterial({ color: 0x202b31, roughness: 0.62, metalness: 0.03 });
+        const phoneRubber = new THREE.MeshStandardMaterial({ color: 0x11191d, roughness: 0.78 });
+        const phoneButtonMaterial = new THREE.MeshStandardMaterial({ color: 0xd9e2e6, roughness: 0.5 });
+        const phoneScreenMaterial = new THREE.MeshBasicMaterial({ map: makeDeviceScreenTexture("phone") });
+
+        const phoneBase = roundedBox(0.78, 0.11, 0.48, 0.055, phonePlastic);
+        phoneBase.castShadow = true;
+        phoneBase.receiveShadow = true;
+        phoneGroup.add(phoneBase);
+        registerInteractive(phoneBase, "communication");
+
+        const phoneCradle = roundedBox(0.58, 0.04, 0.18, 0.04, phoneRubber);
+        phoneCradle.position.set(-0.02, 0.075, -0.12);
+        phoneCradle.castShadow = true;
+        phoneGroup.add(phoneCradle);
+        registerInteractive(phoneCradle, "communication");
+
+        const handset = roundedBox(0.62, 0.08, 0.15, 0.07, phoneRubber);
+        handset.position.set(-0.02, 0.135, -0.13);
+        handset.rotation.z = -0.04;
+        handset.castShadow = true;
+        phoneGroup.add(handset);
+        registerInteractive(handset, "communication");
+
+        [-0.28, 0.24].forEach((x) => {
+          const handsetCap = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.082, 0.045, 22), phoneRubber);
+          handsetCap.position.set(x, 0.135, -0.13);
+          handsetCap.rotation.z = Math.PI / 2;
+          handsetCap.castShadow = true;
+          phoneGroup.add(handsetCap);
+        });
+
+        const phoneDisplay = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.16), phoneScreenMaterial);
+        phoneDisplay.position.set(0.14, 0.062, 0.07);
+        phoneDisplay.rotation.x = -Math.PI / 2;
+        phoneGroup.add(phoneDisplay);
+        registerInteractive(phoneDisplay, "communication");
+
+        for (let row = 0; row < 4; row += 1) {
+          for (let col = 0; col < 3; col += 1) {
+            const key = roundedBox(0.07, 0.018, 0.045, 0.012, phoneButtonMaterial);
+            key.position.set(-0.23 + col * 0.09, 0.068, 0.02 + row * 0.06);
+            key.castShadow = true;
+            phoneGroup.add(key);
+          }
+        }
+
+        const phoneCordPoints = [];
+        for (let i = 0; i <= 28; i += 1) {
+          const t = i / 28;
+          phoneCordPoints.push(new THREE.Vector3(
+            -0.31 - t * 0.38,
+            0.08 + Math.sin(t * Math.PI * 10) * 0.018,
+            -0.1 + t * 0.36,
+          ));
+        }
+        const phoneCord = new THREE.Mesh(
+          new THREE.TubeGeometry(new THREE.CatmullRomCurve3(phoneCordPoints), 64, 0.008, 8, false),
+          phoneRubber,
         );
-        communicationBase.position.set(1.85, 1.05, 1.15);
-        communicationBase.rotation.y = -0.18;
-        communicationBase.castShadow = true;
-        scene.add(communicationBase);
-        registerInteractive(communicationBase, "communication");
+        phoneGroup.add(phoneCord);
 
-        const communicationScreen = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.58, 0.28),
-          new THREE.MeshBasicMaterial({ color: 0x0f5664 }),
-        );
-        communicationScreen.position.set(1.85, 1.1, 1.16);
-        communicationScreen.rotation.x = -Math.PI / 2;
-        communicationScreen.rotation.z = 0.18;
-        scene.add(communicationScreen);
-        registerInteractive(communicationScreen, "communication");
+        const laptopGroup = new THREE.Group();
+        laptopGroup.position.set(-0.08, 1.105, 0.02);
+        laptopGroup.rotation.y = 0.04;
+        laptopGroup.scale.setScalar(0.72);
+        cartGroup.add(laptopGroup);
 
-        const laptopBaseMaterial = new THREE.MeshStandardMaterial({ color: 0x263642, roughness: 0.5 });
-        const laptopScreenMaterial = new THREE.MeshBasicMaterial({ color: 0x0b2f3a });
-        const laptopGlowMaterial = new THREE.MeshBasicMaterial({ color: 0x67e8f9, transparent: true, opacity: 0.38 });
+        const laptopAluminum = new THREE.MeshStandardMaterial({ color: 0x2d3b43, roughness: 0.38, metalness: 0.28 });
+        const laptopDarkPlastic = new THREE.MeshStandardMaterial({ color: 0x121b20, roughness: 0.56, metalness: 0.08 });
+        const laptopKeyMaterial = new THREE.MeshStandardMaterial({ color: 0x0f171b, roughness: 0.66 });
+        const laptopTrackpadMaterial = new THREE.MeshStandardMaterial({ color: 0x40515a, roughness: 0.42, metalness: 0.12 });
+        const laptopScreenMaterial = new THREE.MeshBasicMaterial({
+          color: 0x111b20,
+          side: THREE.DoubleSide,
+        });
+        const laptopScreenGlow = new THREE.MeshBasicMaterial({
+          color: 0x5eead4,
+          transparent: true,
+          opacity: 0.1,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -3,
+          polygonOffsetUnits: -3,
+        });
+        const laptopGlowMaterial = new THREE.MeshBasicMaterial({ color: 0x67e8f9, transparent: true, opacity: 0.22 });
 
-        const laptopBase = new THREE.Mesh(
-          new THREE.BoxGeometry(0.98, 0.08, 0.62),
-          laptopBaseMaterial,
-        );
-        laptopBase.position.set(-2.2, 1.03, 0.9);
-        laptopBase.rotation.y = -0.28;
+        const laptopBase = roundedBox(1.04, 0.055, 0.66, 0.04, laptopAluminum);
         laptopBase.castShadow = true;
-        scene.add(laptopBase);
+        laptopBase.receiveShadow = true;
+        laptopGroup.add(laptopBase);
         registerInteractive(laptopBase, "emr");
 
-        const laptopScreen = new THREE.Mesh(
-          new THREE.BoxGeometry(0.9, 0.58, 0.06),
-          laptopBaseMaterial,
-        );
-        laptopScreen.position.set(-2.28, 1.36, 0.65);
-        laptopScreen.rotation.x = -0.28;
-        laptopScreen.rotation.y = -0.28;
+        const keyboardWell = roundedBox(0.72, 0.018, 0.26, 0.025, laptopDarkPlastic);
+        keyboardWell.position.set(-0.08, 0.04, -0.02);
+        laptopGroup.add(keyboardWell);
+        registerInteractive(keyboardWell, "emr");
+
+        for (let row = 0; row < 4; row += 1) {
+          for (let col = 0; col < 10; col += 1) {
+            const keyWidth = col === 9 ? 0.048 : 0.042;
+            const key = roundedBox(keyWidth, 0.012, 0.035, 0.006, laptopKeyMaterial);
+            key.position.set(-0.38 + col * 0.065, 0.056, -0.11 + row * 0.055);
+            laptopGroup.add(key);
+          }
+        }
+
+        const trackpad = roundedBox(0.28, 0.012, 0.16, 0.018, laptopTrackpadMaterial);
+        trackpad.position.set(0.17, 0.057, 0.22);
+        laptopGroup.add(trackpad);
+        registerInteractive(trackpad, "emr");
+
+        const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.9, 18), laptopDarkPlastic);
+        hinge.position.set(0, 0.06, -0.34);
+        hinge.rotation.z = Math.PI / 2;
+        hinge.castShadow = true;
+        laptopGroup.add(hinge);
+
+        const laptopScreen = roundedBox(0.94, 0.58, 0.045, 0.035, laptopAluminum);
+        laptopScreen.position.set(0, 0.35, -0.35);
+        laptopScreen.rotation.x = -0.34;
         laptopScreen.castShadow = true;
-        scene.add(laptopScreen);
+        laptopGroup.add(laptopScreen);
         registerInteractive(laptopScreen, "emr");
 
-        const laptopDisplay = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.72, 0.42),
-          laptopScreenMaterial,
-        );
-        laptopDisplay.position.set(-2.19, 1.36, 0.69);
-        laptopDisplay.rotation.x = -0.28;
-        laptopDisplay.rotation.y = -0.28;
-        scene.add(laptopDisplay);
+        const laptopDisplay = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.43), laptopScreenMaterial);
+        laptopDisplay.position.set(0, 0.35, -0.321);
+        laptopDisplay.rotation.x = -0.34;
+        laptopGroup.add(laptopDisplay);
         registerInteractive(laptopDisplay, "emr");
 
+        const laptopDisplayGlow = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.35), laptopScreenGlow);
+        laptopDisplayGlow.position.set(0, 0.35, -0.318);
+        laptopDisplayGlow.rotation.x = -0.34;
+        laptopGroup.add(laptopDisplayGlow);
+
+        function addLaptopMiniEmrLayer(zOffset) {
+          const miniEmrParts = [
+            { x: 0, y: 0, w: 0.68, h: 0.36, color: 0xf7fbfd },
+            { x: 0, y: 0.155, w: 0.68, h: 0.048, color: 0xe8f1f5 },
+            { x: -0.24, y: 0.155, w: 0.13, h: 0.026, color: 0x147d7e },
+            { x: -0.18, y: 0.058, w: 0.25, h: 0.15, color: 0xffffff },
+            { x: 0.16, y: 0.058, w: 0.28, h: 0.15, color: 0xffffff },
+            { x: -0.23, y: 0.09, w: 0.12, h: 0.012, color: 0x1b2730 },
+            { x: -0.22, y: 0.05, w: 0.14, h: 0.01, color: 0x66727f },
+            { x: -0.22, y: 0.015, w: 0.11, h: 0.01, color: 0x66727f },
+            { x: 0.08, y: 0.092, w: 0.13, h: 0.012, color: 0x147d7e },
+            { x: 0.12, y: 0.045, w: 0.2, h: 0.011, color: 0x1b2730 },
+            { x: 0.12, y: 0.012, w: 0.18, h: 0.011, color: 0x1b2730 },
+            { x: 0.12, y: -0.021, w: 0.15, h: 0.011, color: 0x1b2730 },
+            { x: -0.18, y: -0.116, w: 0.27, h: 0.05, color: 0xe8f6f5 },
+            { x: 0.17, y: -0.116, w: 0.22, h: 0.05, color: 0xeaf1fb },
+          ];
+
+          miniEmrParts.forEach((part) => {
+            const mesh = new THREE.Mesh(
+              new THREE.PlaneGeometry(part.w, part.h),
+              new THREE.MeshBasicMaterial({
+                color: part.color,
+                side: THREE.DoubleSide,
+                polygonOffset: true,
+                polygonOffsetFactor: -4,
+                polygonOffsetUnits: -4,
+              }),
+            );
+            mesh.position.set(part.x, 0.35 + part.y, zOffset);
+            mesh.rotation.x = -0.34;
+            laptopGroup.add(mesh);
+            if (part.w > 0.6) registerInteractive(mesh, "emr");
+          });
+        }
+
+        addLaptopMiniEmrLayer(-0.314);
+
+        const cameraDot = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 8), laptopDarkPlastic);
+        cameraDot.position.set(0, 0.61, -0.317);
+        cameraDot.rotation.x = -0.34;
+        laptopGroup.add(cameraDot);
+
         const laptopHotspot = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.42, 32), laptopGlowMaterial);
-        laptopHotspot.position.set(-2.19, 1.08, 1.22);
+        laptopHotspot.position.set(0.02, 0.047, 0.33);
         laptopHotspot.rotation.x = -Math.PI / 2;
-        scene.add(laptopHotspot);
+        laptopGroup.add(laptopHotspot);
         registerInteractive(laptopHotspot, "emr");
 
         const patientHotspot = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.82, 36), hotspotMaterial);
@@ -1442,13 +1843,13 @@
 
           const cameraDrift = 0.008 + cues.calm * 0.003;
           camera.position.set(
-            baseCameraPosition.x + Math.sin(time * 0.08) * cameraDrift,
-            baseCameraPosition.y + Math.sin(time * 0.11 + 1.4) * cameraDrift * 0.55,
+            baseCameraPosition.x + cameraPan.x + Math.sin(time * 0.08) * cameraDrift,
+            baseCameraPosition.y + cameraPan.y + Math.sin(time * 0.11 + 1.4) * cameraDrift * 0.55,
             baseCameraPosition.z + Math.cos(time * 0.07) * cameraDrift,
           );
           camera.lookAt(
-            baseCameraTarget.x + Math.sin(time * 0.06) * 0.01,
-            baseCameraTarget.y + Math.sin(time * 0.05 + 0.6) * 0.006,
+            baseCameraTarget.x + cameraPan.x + Math.sin(time * 0.06) * 0.01,
+            baseCameraTarget.y + cameraPan.y * 0.72 + Math.sin(time * 0.05 + 0.6) * 0.006,
             baseCameraTarget.z,
           );
 
@@ -1463,6 +1864,6 @@
         }
       }
     </script>
-    <script src="./script.js?v=prototype4-medux1"></script>
+    <script src="./script.js?v=prototype4-device3"></script>
   </body>
 </html>

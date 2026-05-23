@@ -277,6 +277,168 @@ const sbarOptions = {
   ],
 };
 
+function completedPostPrnReassessmentCount() {
+  return Object.values(state.postPrnReassessment || {}).filter(Boolean).length;
+}
+
+function getClinicalTrajectory() {
+  const vitals = currentVitals();
+  const pain = Number(state.patientStatus.pain);
+  const prnGiven = state.prnMedicationsGiven.length > 0;
+  const reassessed = completedPostPrnReassessmentCount() >= 2;
+  const regularComplete = typeof requiredRegularOrdersComplete === "function" ? requiredRegularOrdersComplete() : false;
+  const unstableVitals = vitals.hr >= 128 || vitals.spo2 <= 90 || vitals.rr >= 30;
+  const treatmentResponse = prnGiven && reassessed && pain <= 3.5 && vitals.hr <= 112 && vitals.spo2 >= 94;
+
+  if (unstableVitals || pain >= 8) return "deteriorating";
+  if (treatmentResponse) return "stabilizedAfterTreatment";
+  if (prnGiven && reassessed && pain >= 4.5) return "persistentPainAfterTreatment";
+  if (prnGiven && reassessed) return "partialResponseAfterTreatment";
+  if (regularComplete && !prnGiven) return "regularOrdersComplete";
+  return "incompleteOrWatchful";
+}
+
+function currentSbarClinicalSummary() {
+  const vitals = currentVitals();
+  const pain = Number(state.patientStatus.pain);
+  const meds = state.prnMedicationsGiven.map((id) => {
+    const order = patient.prnOrders.find((item) => item.id === id);
+    return order ? order.label.split(" PRN")[0] : id;
+  });
+  const prnText = meds.length ? meds.join(", ") : "PRN 미투여";
+  return { vitals, pain, prnText };
+}
+
+function buildSbarOptions() {
+  const trajectory = getClinicalTrajectory();
+  const { vitals, pain, prnText } = currentSbarClinicalSummary();
+  const regularText = state.appliedRegularOrders.includes("aspirin") && state.appliedRegularOrders.includes("ekg")
+    ? "Aspirin 적용 및 continuous EKG monitoring을 반영했습니다."
+    : "정규 처방 적용 상태를 추가 확인해야 합니다.";
+
+  const baseWrong = {
+    S: [
+      { id: "s-rest", text: "환자가 불안해하며 휴식을 원합니다.", correct: false },
+      { id: "s-procedure-only", text: "EKG procedure를 문제 없이 완료했습니다.", correct: false },
+    ],
+    B: [
+      { id: "b-post-op", text: "환자는 CABG 후 POD#0이며 discharge teaching이 필요합니다.", correct: false },
+      { id: "b-normal-labs", text: "관련 lab abnormality는 없고 특별한 처방은 없습니다.", correct: false },
+    ],
+    A: [
+      { id: "a-defer", text: "Monitor가 연결되어 있으므로 추가 assessment는 보류합니다.", correct: false },
+      { id: "a-no-data", text: "현재 통증과 활력징후는 아직 확인하지 않았습니다.", correct: false },
+    ],
+    R: [
+      { id: "r-routine", text: "내일 아침 routine follow-up을 요청합니다.", correct: false },
+      { id: "r-discharge", text: "Discharge medication reconciliation을 요청합니다.", correct: false },
+    ],
+  };
+
+  const profiles = {
+    stabilizedAfterTreatment: {
+      S: { id: "s-stable", text: "62세 ACS 의심 환자이며 " + prnText + " 후 chest pain이 " + pain + "/10으로 호전되었습니다.", correct: true },
+      B: { id: "b-stable", text: "Diagnosis는 Acute Coronary Syndrome 의심이며 Troponin I 0.08 ng/mL입니다. " + regularText, correct: true },
+      A: { id: "a-stable", text: "재사정상 HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%, BP " + vitals.bp + "로 안정화 추세이며 통증도 감소했습니다.", correct: true },
+      R: { id: "r-stable", text: "현재 처치 유지, 지속 ECG monitoring, repeat ECG/troponin 계획과 추가 흉통 시 재보고 기준 확인을 요청합니다.", correct: true },
+    },
+    partialResponseAfterTreatment: {
+      S: { id: "s-partial", text: "62세 ACS 의심 환자이며 " + prnText + " 후 chest pain은 줄었지만 " + pain + "/10으로 일부 남아 있습니다.", correct: true },
+      B: { id: "b-partial", text: "ACS 의심으로 CABG 평가 대기 중이며 " + regularText + " PRN 후 재사정을 진행했습니다.", correct: true },
+      A: { id: "a-partial", text: "HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%, BP " + vitals.bp + "입니다. 완전한 안정은 아니므로 지속 관찰과 추가 판단이 필요합니다.", correct: true },
+      R: { id: "r-partial", text: "추가 처방 필요 여부, repeat ECG/troponin, 통증 재발 시 즉시 평가 기준을 확인 요청합니다.", correct: true },
+    },
+    persistentPainAfterTreatment: {
+      S: { id: "s-persistent", text: "62세 ACS 의심 환자이며 " + prnText + " 후에도 chest pain이 " + pain + "/10으로 지속됩니다.", correct: true },
+      B: { id: "b-persistent", text: "Diagnosis는 Acute Coronary Syndrome 의심이며 Troponin I 0.08 ng/mL입니다. " + regularText, correct: true },
+      A: { id: "a-persistent", text: "HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%, BP " + vitals.bp + "이며 PRN 후에도 흉통과 ACS 우려가 남아 있습니다.", correct: true },
+      R: { id: "r-persistent", text: "지속되는 chest pain에 대해 즉시 physician evaluation과 추가 orders를 요청합니다.", correct: true },
+    },
+    deteriorating: {
+      S: { id: "s-deteriorating", text: "62세 ACS 의심 환자가 흉통/활력징후 악화 양상을 보이며 즉시 평가가 필요합니다.", correct: true },
+      B: { id: "b-deteriorating", text: "ACS 의심, Troponin I 0.08 ng/mL, CABG 평가 대기 중입니다. " + regularText, correct: true },
+      A: { id: "a-deteriorating", text: "현재 pain " + pain + "/10, HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%, BP " + vitals.bp + "로 불안정성이 높습니다.", correct: true },
+      R: { id: "r-deteriorating", text: "즉시 bedside evaluation, ACS escalation, 추가 ECG/lab 및 처방을 요청합니다.", correct: true },
+    },
+    regularOrdersComplete: {
+      S: { id: "s-regular", text: "62세 ACS 의심 환자이며 정규 처방 적용 후에도 chest pain 지속 여부를 평가 중입니다.", correct: true },
+      B: { id: "b-regular", text: "ACS 의심으로 CABG 평가 대기 중이며 " + regularText + " PRN 처방은 필요 시 투여 가능합니다.", correct: true },
+      A: { id: "a-regular", text: "현재 pain " + pain + "/10, HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%입니다. PRN 필요성 판단을 위한 재사정이 필요합니다.", correct: true },
+      R: { id: "r-regular", text: "PRN 적용 기준, 추가 모니터링, 보고 기준을 확인 요청합니다.", correct: true },
+    },
+    incompleteOrWatchful: {
+      S: { id: "s-incomplete", text: "62세 ACS 의심 환자에 대해 현재 침상 사정 자료를 수집 중입니다.", correct: true },
+      B: { id: "b-incomplete", text: "ACS 의심과 PRN/정규 처방이 있으나 처치와 재사정 근거가 아직 완전하지 않습니다.", correct: true },
+      A: { id: "a-incomplete", text: "현재 pain " + pain + "/10, HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%입니다. 보고 전 추가 사정이 필요합니다.", correct: true },
+      R: { id: "r-incomplete", text: "우선 활력징후, ECG, 통증 재사정 후 필요한 처방/보고 기준을 다시 확인하겠습니다.", correct: true },
+    },
+  };
+
+  const profile = profiles[trajectory] || profiles.incompleteOrWatchful;
+  return {
+    S: [profile.S, ...baseWrong.S],
+    B: [profile.B, ...baseWrong.B],
+    A: [profile.A, ...baseWrong.A],
+    R: [profile.R, ...baseWrong.R],
+  };
+}
+
+function normalizeSbarSelections(options = buildSbarOptions()) {
+  Object.keys(state.sbarSelections || {}).forEach((component) => {
+    if (!options[component]?.some((option) => option.id === state.sbarSelections[component])) {
+      delete state.sbarSelections[component];
+    }
+  });
+}
+
+function sbarOutcomeForTrajectory(trajectory = getClinicalTrajectory()) {
+  const { vitals, pain } = currentSbarClinicalSummary();
+  if (trajectory === "stabilizedAfterTreatment") {
+    return {
+      type: "stabilized",
+      reason: "처치와 재사정 후 통증과 활력징후가 안정화되었습니다.",
+      details: ["통증 " + pain + "/10", "HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%", "지속 모니터링 계획 확인"],
+    };
+  }
+
+  if (trajectory === "deteriorating") {
+    return {
+      type: "stabilized",
+      reason: "악화 양상을 근거로 즉시 SBAR escalation을 완료했습니다.",
+      details: ["긴급 bedside evaluation 요청", "ACS escalation", "현재 HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%"],
+    };
+  }
+
+  if (trajectory === "persistentPainAfterTreatment" || trajectory === "partialResponseAfterTreatment") {
+    return {
+      type: "stabilized",
+      reason: "PRN 후 남은 증상에 대해 현재 자료를 근거로 추가 평가를 요청했습니다.",
+      details: ["PRN 후 재사정 완료", "통증 " + pain + "/10", "추가 orders/evaluation 요청"],
+    };
+  }
+
+  return {
+    type: "stabilized",
+    reason: "SBAR로 현재 상태와 추가 확인 계획을 전달했습니다.",
+    details: ["현재 HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%", "추가 사정/모니터링 계획"],
+  };
+}
+
+function allPostPrnReassessmentsComplete() {
+  ensurePostPrnReassessment();
+  return Object.values(state.postPrnReassessment).every(Boolean);
+}
+
+function tryResolveStableTreatmentOutcome() {
+  if (state.outcome || state.stage !== "persistentSymptoms") return false;
+  if (!state.prnMedicationsGiven.length || !allPostPrnReassessmentsComplete()) return false;
+  if (getClinicalTrajectory() !== "stabilizedAfterTreatment") return false;
+
+  const outcome = sbarOutcomeForTrajectory("stabilizedAfterTreatment");
+  setPatientOutcome(outcome.type, outcome.reason, ["SBAR 불필요: 처치 후 재사정에서 안정화 확인", ...outcome.details]);
+  return true;
+}
+
 const historyQuestions = [
   {
     id: "onset",
@@ -1704,11 +1866,13 @@ function addPostPrnReassessmentLog(key) {
   if (firstReassessment) {
     recordPostPrnReassessment(key);
     addLog("PRN 후 재사정: " + postPrnReassessmentLabels[key] + " - " + reassessmentChangeSummary(key), "good");
+    tryResolveStableTreatmentOutcome();
     return;
   }
 
   applyScore({ clinical: 1 });
   addLog("추적 재사정: " + postPrnReassessmentLabels[key] + " - " + reassessmentChangeSummary(key), "good");
+  tryResolveStableTreatmentOutcome();
 }
 
 function addPostPrnRequiredLog(missing) {
@@ -3773,7 +3937,9 @@ function beginRegularOrdersFromReview(source = "처방 확인") {
   applyScore({ clinical: 4, protocol: 4 });
   addLog(source + ": ECG 적용 후 active 정규 처방을 확인했습니다. 필요한 처방을 적용하세요.", "good");
   state.stage = "regularOrders";
+  closeEmr();
   render();
+  renderOrderContextWindow();
   return true;
 }
 
@@ -3784,8 +3950,9 @@ function openRegularMedicationWorkflow(source = "정규 약물 투여") {
 
   if (state.stage === "regularOrders") {
     addLog(source + ": 정규 약물 투여 창을 다시 열었습니다.", "good");
-    renderOrderContextWindow();
+    closeEmr();
     render();
+    renderOrderContextWindow();
     return true;
   }
 
@@ -3961,7 +4128,9 @@ function submitSbar() {
     return;
   }
 
-  const components = Object.keys(sbarOptions);
+  const dynamicSbarOptions = buildSbarOptions();
+  normalizeSbarSelections(dynamicSbarOptions);
+  const components = Object.keys(dynamicSbarOptions);
   const incomplete = components.filter((component) => !state.sbarSelections[component]);
 
   if (incomplete.length > 0) {
@@ -3971,7 +4140,7 @@ function submitSbar() {
   }
 
   const incorrect = components.filter((component) => {
-    const selected = sbarOptions[component].find((option) => option.id === state.sbarSelections[component]);
+    const selected = dynamicSbarOptions[component].find((option) => option.id === state.sbarSelections[component]);
     return !selected?.correct;
   });
 
@@ -3999,7 +4168,8 @@ function submitSbar() {
     applyPatientImpact({ anxiety: 3 });
   }
   closeContextWindow();
-  setPatientOutcome("stabilized", "SBAR 보고 후 환자 상태가 안정화 경로에 들어섰습니다.", ["SBAR 보고 완료", "사정/모니터링/중재 근거 전달"]);
+  const outcome = sbarOutcomeForTrajectory(getClinicalTrajectory());
+  setPatientOutcome(outcome.type, outcome.reason, outcome.details);
 }
 
 function chooseProcedureStep(step) {
@@ -4638,12 +4808,22 @@ function createSbarBuilder() {
   card.className = "sbar-builder";
 
   const readiness = sbarReadinessSummary();
+  const dynamicSbarOptions = buildSbarOptions();
+  normalizeSbarSelections(dynamicSbarOptions);
+  const trajectoryLabel = {
+    stabilizedAfterTreatment: "처치 후 안정화",
+    partialResponseAfterTreatment: "부분 호전",
+    persistentPainAfterTreatment: "PRN 후 증상 지속",
+    deteriorating: "악화/긴급 보고",
+    regularOrdersComplete: "정규 처방 후 판단",
+    incompleteOrWatchful: "근거 보완 필요",
+  }[getClinicalTrajectory()] || "현재 상태 기반";
   const readinessPanel = document.createElement("div");
   readinessPanel.className = "sbar-readiness";
-  readinessPanel.innerHTML = "<strong>SBAR 보고 준비도: " + readiness.strength + " (" + readiness.completed + "/" + readiness.total + ")</strong><span>보고 품질은 사정, 모니터 확인, 중재 시도, urgency 근거에 따라 달라집니다.</span>";
+  readinessPanel.innerHTML = "<strong>SBAR 보고 준비도: " + readiness.strength + " (" + readiness.completed + "/" + readiness.total + ")</strong><span>현재 경과: " + trajectoryLabel + ". 보기는 시행한 처치, 재사정, 현재 활력징후에 따라 바뀝니다.</span>";
   card.append(readinessPanel);
 
-  Object.entries(sbarOptions).forEach(([component, options]) => {
+  Object.entries(dynamicSbarOptions).forEach(([component, options]) => {
     const group = document.createElement("div");
     group.className = "sbar-group";
     group.innerHTML = `<h4>${component}</h4>`;

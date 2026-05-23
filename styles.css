@@ -127,6 +127,11 @@ h1 {
   height: 100%;
 }
 
+.three-room-canvas {
+  touch-action: none;
+  user-select: none;
+}
+
 #monitor {
   display: none;
 }
@@ -2686,34 +2691,12 @@ body.clinical-entry-active .workflow-hud {
 
 
 /* Prototype 4 floating clinical card controls */
-.hud-visibility-toggle {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 10;
-  display: inline-grid;
-  place-items: center;
-  min-width: 58px;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid rgba(24, 33, 43, 0.14);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #263642;
-  box-shadow: 0 8px 20px rgba(26, 39, 54, 0.1);
-  backdrop-filter: blur(12px);
-  cursor: pointer;
-}
-
-.hud-visibility-toggle span,
 .hint-card-toggle {
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0;
 }
 
-.hud-visibility-toggle:hover,
-.hud-visibility-toggle:focus-visible,
 .hint-card-toggle:hover,
 .hint-card-toggle:focus-visible,
 .floating-card-header button:hover,
@@ -2721,11 +2704,6 @@ body.clinical-entry-active .workflow-hud {
   border-color: var(--teal);
   background: rgba(255, 255, 255, 0.94);
   outline: none;
-}
-
-body.clinical-cards-compact .hud-visibility-toggle {
-  background: rgba(20, 125, 126, 0.86);
-  color: white;
 }
 
 .floating-card-header {
@@ -2783,12 +2761,6 @@ body.clinical-cards-compact .hud-visibility-toggle {
 @media (max-width: 920px) {
   .hint-card-toggle {
     bottom: 196px;
-  }
-}
-
-@media (max-width: 560px) {
-  .hud-visibility-toggle {
-    min-width: 52px;
   }
 }
 
