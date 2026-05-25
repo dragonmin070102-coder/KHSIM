@@ -141,6 +141,25 @@ const patient = {
   ],
 };
 
+const episodes = {
+  acsChestPain: {
+    id: "acsChestPain",
+    title: "급성 흉통 환자 간호",
+    patientName: "김현수",
+    patientSummary: "62세 남성 · ACS 의심 · CABG 평가 대기",
+    difficulty: "초급-중급",
+    status: "available",
+  },
+  cardiacArrest: {
+    id: "cardiacArrest",
+    title: "심정지 환자 대응",
+    patientName: "준비 중",
+    patientSummary: "Code Blue, CPR, 리듬 판독, 제세동/투약 흐름",
+    difficulty: "상급",
+    status: "comingSoon",
+  },
+};
+
 
 const patientInteractionFindings = {
   symptomDialogue: {
@@ -1022,6 +1041,15 @@ const contextWindowTitleEl = document.querySelector("#context-window-title");
 const contextWindowSubtitleEl = document.querySelector("#context-window-subtitle");
 const contextWindowBodyEl = document.querySelector("#context-window-body");
 const contextWindowCloseEl = document.querySelector("#context-window-close");
+const titleScreenEl = document.querySelector("#title-screen");
+const titleStartEl = document.querySelector("#title-start");
+const titleEpisodeSelectEl = document.querySelector("#title-episode-select");
+const titleOptionsEl = document.querySelector("#title-options");
+const titleOptionsPanelEl = document.querySelector("#title-options-panel");
+const episodeLobbyEl = document.querySelector("#episode-lobby");
+const episodeStartEl = document.querySelector("#episode-start");
+const episodeBackHomeEl = document.querySelector("#episode-back-home");
+const simulationHomeEl = document.querySelector("#simulation-home");
 let contextWindowDrag = null;
 let hudClusterDrag = null;
 const handoffOverlayEl = document.querySelector("#handoff-overlay");
@@ -1533,6 +1561,50 @@ function resetGame() {
   };
   closeContextWindow();
   addLog("야간 근무 인계가 시작되었습니다. 환자 상태와 처방을 확인한 뒤 침상으로 들어갑니다.");
+}
+
+function openEpisodeLobby() {
+  titleScreenEl.hidden = true;
+  episodeLobbyEl.hidden = false;
+  document.body.classList.remove("title-active");
+  document.body.classList.add("lobby-active");
+  titleOptionsPanelEl.hidden = true;
+}
+
+function returnToTitleScreen() {
+  closeEmr();
+  closeContextWindow();
+  closeEcgProcedureOverlay();
+  closePatientConversation();
+  closeClinicalInteractionMenu();
+  if (physicianContactEl) physicianContactEl.hidden = true;
+  titleScreenEl.hidden = false;
+  episodeLobbyEl.hidden = true;
+  document.body.classList.add("title-active");
+  document.body.classList.remove("lobby-active");
+  titleOptionsPanelEl.hidden = true;
+}
+
+function toggleTitleOptions() {
+  titleOptionsPanelEl.hidden = !titleOptionsPanelEl.hidden;
+}
+
+function startEpisode(episodeId = "acsChestPain") {
+  const episode = episodes[episodeId];
+
+  if (!episode || episode.status !== "available") {
+    showClinicalNotification("아직 준비 중인 에피소드입니다.", "warning");
+    return;
+  }
+
+  resetGame();
+  titleScreenEl.hidden = true;
+  episodeLobbyEl.hidden = true;
+  document.body.classList.remove("title-active");
+  document.body.classList.remove("lobby-active");
+  closeEmr();
+  render();
+  showBeginnerOnboardingHints();
 }
 
 function shuffleProcedureOptions() {
@@ -5094,8 +5166,13 @@ window.addEventListener("resize", () => {
 floatingCardToggleButtons.forEach((button) => {
   button.addEventListener("click", () => toggleFloatingCard(button.dataset.floatingCardToggle));
 });
+titleStartEl?.addEventListener("click", openEpisodeLobby);
+titleEpisodeSelectEl?.addEventListener("click", openEpisodeLobby);
+titleOptionsEl?.addEventListener("click", toggleTitleOptions);
+episodeBackHomeEl?.addEventListener("click", returnToTitleScreen);
+episodeStartEl?.addEventListener("click", () => startEpisode("acsChestPain"));
+simulationHomeEl?.addEventListener("click", returnToTitleScreen);
 
 resetGame();
 render();
-showBeginnerOnboardingHints();
 startPatientStateLoop();
