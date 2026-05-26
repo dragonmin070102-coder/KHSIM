@@ -372,6 +372,23 @@ body.lobby-active .app {
   font-weight: 800;
 }
 
+.episode-card-start {
+  min-height: 38px;
+  border: 1px solid var(--teal);
+  border-radius: 6px;
+  background: #147d7e;
+  color: white;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.episode-card-start:hover,
+.episode-card-start:focus-visible {
+  background: #0f6d6e;
+  outline: none;
+}
+
 .episode-briefing {
   display: grid;
   gap: 14px;
@@ -2390,6 +2407,103 @@ body.clinical-entry-active .workflow-hud {
 
 .clinical-action-prompt.compact strong {
   color: var(--teal);
+}
+
+.ward-help-card {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid rgba(24, 33, 43, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #4b5965;
+  box-shadow: 0 10px 26px rgba(26, 39, 54, 0.08);
+}
+
+.ward-help-card > strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.ward-help-card p {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.ward-help-vitals {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(20, 125, 126, 0.16);
+  border-radius: 6px;
+  background: #f2faf9;
+}
+
+.ward-help-vitals span {
+  padding: 7px 6px;
+  color: var(--teal);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.ward-help-vitals span + span {
+  border-left: 1px solid rgba(20, 125, 126, 0.14);
+}
+
+.ward-help-card ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ward-help-card li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 2px 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border: 1px solid rgba(24, 33, 43, 0.1);
+  border-radius: 6px;
+  background: #f7fafb;
+}
+
+.ward-help-card li span {
+  grid-row: span 2;
+  color: #778692;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.ward-help-card li strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.ward-help-card li small {
+  color: #6c7a86;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.ward-help-card li.done {
+  border-color: rgba(20, 125, 126, 0.18);
+  background: #edf8f6;
+}
+
+.ward-help-card li.done span,
+.ward-help-card li.done strong {
+  color: var(--teal);
+}
+
+.ward-help-next {
+  padding-top: 2px;
+  color: var(--blue);
 }
 
 .ecg-procedure-overlay {

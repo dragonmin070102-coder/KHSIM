@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>KHSIM</title>
-    <link rel="stylesheet" href="./styles.css?v=prototype4-nav2" />
+    <link rel="stylesheet" href="./styles.css?v=prototype4-ward11" />
   </head>
   <body class="title-active">
     <section class="title-screen" id="title-screen" aria-labelledby="title-screen-title">
@@ -57,11 +57,27 @@
                 <div><dt>장소</dt><dd>한국 병동 1인실</dd></div>
                 <div><dt>목표</dt><dd>흉통 사정과 처방 기반 중재</dd></div>
               </dl>
+              <button type="button" class="episode-card-start" id="episode-start-acs">흉통 에피소드 시작</button>
+            </article>
+
+            <article class="episode-card active" data-episode-card="ward-workflow">
+              <div class="episode-card-top">
+                <span>Episode 02</span>
+                <strong>신규 모드</strong>
+              </div>
+              <h2>Ward Workflow – Acting Nurse Mode</h2>
+              <p>신규 병동 액팅 간호사 역할로 subtle warning을 발견하고, 차지에게 보고한 뒤 노티 중 bedside 행동을 이어갑니다.</p>
+              <dl>
+                <div><dt>난이도</dt><dd>중급</dd></div>
+                <div><dt>장소</dt><dd>한국 병동 601호</dd></div>
+                <div><dt>목표</dt><dd>역할 분담과 지속 재사정</dd></div>
+              </dl>
+              <button type="button" class="episode-card-start" id="episode-start-ward">액팅 모드 시작</button>
             </article>
 
             <article class="episode-card locked" aria-disabled="true">
               <div class="episode-card-top">
-                <span>Episode 02</span>
+                <span>Episode 03</span>
                 <strong>준비 중</strong>
               </div>
               <h2>심정지 환자 대응</h2>
@@ -593,6 +609,7 @@
         };
         let alarmAudioContext = null;
         let lastAlarmToneAt = 0;
+        let chargeNurseGroup = null;
 
         function clamp01(value) {
           return Math.max(0, Math.min(1, value));
@@ -677,6 +694,8 @@
           chart: "차트: orders/labs",
           medication: "투약 카트: 준비와 확인",
           communication: "의사 연락: SBAR",
+          charge: "차지 간호사: 보고와 최신 상태 업데이트",
+          iv: "IV 라인: patency와 수액 준비",
           scenePan: "화면을 드래그해 병실 시야를 이동합니다.",
         };
         const hotspotMaterial = new THREE.MeshBasicMaterial({
@@ -1400,6 +1419,20 @@
             is3DMonitorActive = Boolean(nextState?.monitorOn || nextState?.ekgAttached);
             drawMonitorTexture(is3DMonitorActive);
           }
+
+          if (chargeNurseGroup) {
+            const ward = nextState?.wardWorkflow;
+            const visible = Boolean(nextState?.currentEpisode === "wardWorkflow" && ward?.chargeAtBedside);
+            chargeNurseGroup.visible = visible;
+            if (visible) {
+              const phoneHand = chargeNurseGroup.getObjectByName("charge-phone-hand");
+              const head = chargeNurseGroup.getObjectByName("charge-head");
+              const breathe = Math.sin(performance.now() * 0.0025) * 0.012;
+              chargeNurseGroup.position.y = breathe;
+              if (phoneHand) phoneHand.rotation.z = ward?.notifyingDoctor ? -0.72 : -0.38;
+              if (head) head.rotation.z = ward?.notifyingDoctor ? -0.08 : 0.03;
+            }
+          }
         };
 
         const oxygenMaskMaterial = new THREE.MeshBasicMaterial({
@@ -1451,13 +1484,26 @@
         ivPole.position.set(1.9, 1.63, 0.92);
         ivPole.castShadow = true;
         scene.add(ivPole);
+        registerInteractive(ivPole, "iv");
         const ivBag = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.3, 0.055),
           new THREE.MeshBasicMaterial({ color: 0xe9fbff, transparent: true, opacity: 0.38 }),
         );
         ivBag.position.set(1.9, 2.42, 0.92);
         scene.add(ivBag);
+        registerInteractive(ivBag, "iv");
         const ivLine = makeTube([[1.9, 2.27, 0.92], [1.45, 1.83, 0.7], [0.55, 1.43, 0.5], [-0.02, 1.42, 0.46]], 0xe9fbff, 0.0055, 0.46);
+        registerInteractive(ivLine, "iv");
+        const ivPort = roundedBox(0.16, 0.05, 0.08, 0.018, new THREE.MeshBasicMaterial({ color: 0xeefbff, transparent: true, opacity: 0.62 }));
+        ivPort.position.set(-0.04, 1.43, 0.48);
+        ivPort.rotation.z = -0.08;
+        scene.add(ivPort);
+        registerInteractive(ivPort, "iv");
+        const ivHotspot = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.25, 32), hotspotMaterial);
+        ivHotspot.position.set(0.05, 1.5, 0.56);
+        ivHotspot.rotation.x = -Math.PI / 2;
+        scene.add(ivHotspot);
+        registerInteractive(ivHotspot, "iv");
 
         const monitorCanvas = document.createElement("canvas");
         monitorCanvas.width = 512;
@@ -1774,6 +1820,89 @@
         );
         phoneGroup.add(phoneCord);
 
+        chargeNurseGroup = new THREE.Group();
+        chargeNurseGroup.name = "charge-nurse";
+        chargeNurseGroup.position.set(-1.95, 0, 1.12);
+        chargeNurseGroup.rotation.y = 0.48;
+        chargeNurseGroup.scale.setScalar(0.86);
+        chargeNurseGroup.visible = false;
+        scene.add(chargeNurseGroup);
+
+        const chargeScrubMaterial = new THREE.MeshStandardMaterial({ color: 0x3f8f9d, roughness: 0.74, metalness: 0.02 });
+        const chargePantsMaterial = new THREE.MeshStandardMaterial({ color: 0x244e59, roughness: 0.78 });
+        const chargeSkinMaterial = new THREE.MeshStandardMaterial({ color: 0xd6a47d, roughness: 0.82 });
+        const chargeHairMaterial = new THREE.MeshStandardMaterial({ color: 0x1f1714, roughness: 0.66 });
+        const chargeShoeMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f7f8, roughness: 0.58 });
+        const chargeBadgeMaterial = new THREE.MeshBasicMaterial({ color: 0xf8fbfc });
+        const chargePhoneMaterial = new THREE.MeshStandardMaterial({ color: 0x11191d, roughness: 0.56 });
+
+        const chargeBody = roundedBox(0.34, 0.62, 0.18, 0.055, chargeScrubMaterial);
+        chargeBody.position.set(0, 1.24, 0);
+        chargeBody.castShadow = true;
+        chargeNurseGroup.add(chargeBody);
+        registerInteractive(chargeBody, "charge");
+
+        const chargeHead = new THREE.Mesh(new THREE.SphereGeometry(0.135, 24, 18), chargeSkinMaterial);
+        chargeHead.name = "charge-head";
+        chargeHead.position.set(0, 1.69, 0.012);
+        chargeHead.scale.set(0.9, 1.05, 0.86);
+        chargeHead.castShadow = true;
+        chargeNurseGroup.add(chargeHead);
+        registerInteractive(chargeHead, "charge");
+
+        const chargeHair = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 12), chargeHairMaterial);
+        chargeHair.position.set(0, 1.76, -0.02);
+        chargeHair.scale.set(0.95, 0.48, 0.9);
+        chargeNurseGroup.add(chargeHair);
+
+        const chargeMask = roundedBox(0.12, 0.045, 0.018, 0.008, new THREE.MeshBasicMaterial({ color: 0xeaf6f8 }));
+        chargeMask.position.set(0, 1.66, 0.118);
+        chargeNurseGroup.add(chargeMask);
+
+        const chargeBadge = roundedBox(0.09, 0.06, 0.012, 0.008, chargeBadgeMaterial);
+        chargeBadge.position.set(-0.09, 1.36, 0.102);
+        chargeNurseGroup.add(chargeBadge);
+
+        [
+          [-0.12, 0.84, 0.03],
+          [0.12, 0.84, 0.03],
+        ].forEach(([x, y, z]) => {
+          const leg = roundedBox(0.1, 0.58, 0.11, 0.035, chargePantsMaterial);
+          leg.position.set(x, y, z);
+          leg.castShadow = true;
+          chargeNurseGroup.add(leg);
+          const shoe = roundedBox(0.14, 0.055, 0.22, 0.025, chargeShoeMaterial);
+          shoe.position.set(x, 0.52, z + 0.035);
+          shoe.castShadow = true;
+          chargeNurseGroup.add(shoe);
+        });
+
+        const chargeLeftArm = roundedBox(0.075, 0.47, 0.08, 0.03, chargeSkinMaterial);
+        chargeLeftArm.position.set(-0.24, 1.26, 0.02);
+        chargeLeftArm.rotation.z = -0.2;
+        chargeLeftArm.castShadow = true;
+        chargeNurseGroup.add(chargeLeftArm);
+
+        const chargeRightArm = roundedBox(0.075, 0.48, 0.08, 0.03, chargeSkinMaterial);
+        chargeRightArm.name = "charge-phone-hand";
+        chargeRightArm.position.set(0.24, 1.38, 0.05);
+        chargeRightArm.rotation.z = -0.72;
+        chargeRightArm.castShadow = true;
+        chargeNurseGroup.add(chargeRightArm);
+        registerInteractive(chargeRightArm, "charge");
+
+        const chargePhone = roundedBox(0.045, 0.12, 0.018, 0.009, chargePhoneMaterial);
+        chargePhone.position.set(0.31, 1.58, 0.11);
+        chargePhone.rotation.z = -0.35;
+        chargeNurseGroup.add(chargePhone);
+        registerInteractive(chargePhone, "charge");
+
+        const chargeHotspot = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.42, 32), hotspotMaterial);
+        chargeHotspot.position.set(0, 1.18, 0.02);
+        chargeHotspot.rotation.x = -Math.PI / 2;
+        chargeNurseGroup.add(chargeHotspot);
+        registerInteractive(chargeHotspot, "charge");
+
         const laptopGroup = new THREE.Group();
         laptopGroup.position.set(-0.08, 1.105, 0.02);
         laptopGroup.rotation.y = 0.04;
@@ -2017,6 +2146,6 @@
         }
       }
     </script>
-    <script src="./script.js?v=prototype4-nav2"></script>
+    <script src="./script.js?v=prototype4-ward11"></script>
   </body>
 </html>

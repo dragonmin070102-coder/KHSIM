@@ -1,4 +1,5 @@
 const state = {
+  currentEpisode: "acsChestPain",
   scores: {
     safety: 50,
     clinical: 50,
@@ -100,6 +101,8 @@ const state = {
     collapsed: false,
     position: null,
   },
+  wardWorkflow: null,
+  chargeFollowUp: null,
 };
 
 const clinicalHandoff = [
@@ -108,6 +111,14 @@ const clinicalHandoff = [
   { label: "산소/활력", text: "마지막 확인 HR 108, SpO2 94%, BP 152/94로 경계선입니다. 호흡은 약간 가쁘지만 대화 가능합니다." },
   { label: "PRN", text: "Nitroglycerin 0.4 mg SL PRN, Morphine 2 mg IV PRN 처방이 있습니다. 투약 전 처방과 용량 확인 필요합니다." },
   { label: "모니터링", text: "Continuous EKG order가 있어 침상 모니터 연결과 파형 확인이 필요합니다. 통증 지속 시 SBAR 보고 준비하세요." },
+];
+
+const wardWorkflowHandoff = [
+  { label: "601호", text: "새벽부터 BP가 borderline입니다. 102/64까지 내려갔다가 조금 회복됐어요." },
+  { label: "소변량", text: "소변량이 전보다 줄었습니다. 보호자가 '평소보다 처진다'고 말했습니다." },
+  { label: "현재 상태", text: "열은 뚜렷하지 않지만 맥박이 조금 빠르고 얼굴빛이 좋지 않습니다." },
+  { label: "역할", text: "당신은 액팅 간호사입니다. 이상징후를 발견하면 차지에게 보고하고 bedside 행동을 지속해야 합니다." },
+  { label: "주의", text: "차지가 의사 노티를 하는 동안에도 repeat BP, 산소, 모니터, IV 확인을 멈추면 안 됩니다." },
 ];
 
 const patient = {
@@ -148,6 +159,14 @@ const episodes = {
     patientName: "김현수",
     patientSummary: "62세 남성 · ACS 의심 · CABG 평가 대기",
     difficulty: "초급-중급",
+    status: "available",
+  },
+  wardWorkflow: {
+    id: "wardWorkflow",
+    title: "Ward Workflow – Acting Nurse Mode",
+    patientName: "601호 환자",
+    patientSummary: "병동 신규 간호사 역할 · subtle deterioration · 차지 협업",
+    difficulty: "중급",
     status: "available",
   },
   cardiacArrest: {
@@ -963,6 +982,260 @@ const scenes = {
       "각 SBAR 항목에서 하나씩 선택한다. 이 simulator는 SBAR 문장을 자동 생성하지 않으므로 clinical data를 바탕으로 직접 구성해야 한다.",
     sbar: true,
   },
+  postSbarBedside: {
+    title: "차지 노티 중 bedside 지속",
+    text:
+      "차지 간호사가 담당의에게 노티하는 중입니다. 보고가 끝이 아닙니다. 액팅 간호사는 환자 곁에서 통증, BP, SpO₂, ECG 변화를 계속 확인해야 합니다.",
+    actions: [
+      {
+        label: "repeat BP와 HR/SpO₂를 다시 확인한다",
+        next: "postSbarBedside",
+        score: { safety: 5, clinical: 5, protocol: 3 },
+        log: "차지 노티 중: repeat BP, HR, SpO₂를 재확인했습니다.",
+        tone: "good",
+        effect: () => chargeFollowUpAction("vitals"),
+      },
+      {
+        label: "환자 통증과 호흡 양상을 재사정한다",
+        next: "postSbarBedside",
+        score: { safety: 4, clinical: 5, empathy: 3 },
+        log: "차지 노티 중: pain과 호흡 양상을 환자에게 다시 확인했습니다.",
+        tone: "good",
+        effect: () => chargeFollowUpAction("pain"),
+      },
+      {
+        label: "ECG/SpO₂ 파형을 계속 관찰한다",
+        next: "postSbarBedside",
+        score: { safety: 4, clinical: 4 },
+        log: "차지 노티 중: ECG와 SpO₂ 파형 변화가 있는지 계속 관찰했습니다.",
+        tone: "good",
+        effect: () => chargeFollowUpAction("monitor"),
+      },
+      {
+        label: "산소 적용 상태와 라인 위치를 확인한다",
+        next: "postSbarBedside",
+        score: { safety: 3, clinical: 3 },
+        log: "차지 노티 중: 산소 적용 상태와 환자 라인을 정리했습니다.",
+        tone: "good",
+        effect: () => chargeFollowUpAction("oxygen"),
+      },
+      {
+        label: "차지에게 최신 bedside update를 전달한다",
+        next: "postSbarBedside",
+        score: { safety: 3, clinical: 4, protocol: 4 },
+        log: "차지에게 노티 중 최신 환자 상태를 업데이트했습니다.",
+        tone: "good",
+        effect: () => chargeFollowUpAction("updateCharge"),
+      },
+      {
+        label: "차지가 노티 중이니 결과만 기다린다",
+        next: "postSbarBedside",
+        score: { safety: -7, clinical: -6, protocol: -4 },
+        log: "차지 노티 중 bedside 재사정이 멈췄습니다.",
+        tone: "warning",
+        effect: () => chargeFollowUpAction("waited"),
+      },
+    ],
+  },
+  wardIntro: {
+    title: "601호 병실 입실",
+    text:
+      "당신은 병동 신규 액팅 간호사입니다. 이미 bedside monitor가 켜져 있고 HR 상승, BP borderline/downtrend, SpO₂ 하락, 약간 처진 반응이 보입니다. 모니터와 환자 상태를 근거로 차지에게 보고할 준비를 하세요.",
+    actions: [
+      {
+        label: "모니터 수치와 파형을 보며 repeat BP를 확인한다",
+        next: "wardDeterioration",
+        score: { safety: 6, clinical: 6, protocol: 3 },
+        log: "모니터 기반 사정: HR, SpO₂ 파형, BP downtrend를 보고 repeat BP를 확인했습니다.",
+        tone: "good",
+        effect: () => wardAction("repeatBp"),
+      },
+      {
+        label: "환자 확인 후 의식, 피부, 말초순환을 빠르게 훑는다",
+        next: "wardDeterioration",
+        score: { safety: 5, clinical: 5, empathy: 4 },
+        log: "액팅 사정: 처짐, 창백함, 말초순환과 호흡 양상을 확인했습니다.",
+        tone: "good",
+        effect: () => wardAction("mentalCheck"),
+      },
+      {
+        label: "차지 간호사를 호출하고 모니터 변화 추세를 보고한다",
+        next: "wardChargeNotify",
+        score: { safety: 6, clinical: 6, protocol: 5 },
+        log: "차지 호출: 이미 연결된 모니터의 HR 상승, BP 저하, SpO₂ 하락 추세를 묶어 보고했습니다.",
+        tone: "good",
+        effect: () => wardAction("chargeCalled"),
+      },
+      {
+        label: "인계 내용만 믿고 병실 밖 업무를 먼저 본다",
+        next: "wardDeterioration",
+        score: { safety: -8, clinical: -6 },
+        log: "subtle warning이 있었지만 bedside baseline 확인이 지연되었습니다.",
+        tone: "warning",
+        effect: () => wardAction("leftBedside"),
+      },
+    ],
+  },
+  wardBaseline: {
+    title: "Baseline 사정",
+    text:
+      "환자는 대답은 하지만 약간 느리고 얼굴이 창백합니다. 보호자는 '아침보다 더 처지는 것 같다'고 말합니다. 모니터는 이미 켜져 있으므로 수치 변화와 환자 반응을 함께 보고하세요.",
+    actions: [
+      {
+        label: "repeat BP와 SpO₂를 측정한다",
+        next: "wardDeterioration",
+        score: { safety: 6, clinical: 6, protocol: 3 },
+        log: "repeat BP/SpO₂ 측정: borderline hypotension과 산소화 저하 가능성을 추적하기 시작했습니다.",
+        tone: "good",
+        effect: () => wardAction("repeatBp"),
+      },
+      {
+        label: "모니터 HR/SpO₂ 파형과 BP 추이를 다시 읽는다",
+        next: "wardDeterioration",
+        score: { safety: 5, clinical: 5 },
+        log: "모니터 재확인: HR 상승, SpO₂ 파형, BP 추이를 차지 보고 근거로 정리했습니다.",
+        tone: "good",
+        effect: () => wardAction("monitor"),
+      },
+      {
+        label: "차지에게 바로 전화만 하고 병실을 떠난다",
+        next: "wardChargeNotify",
+        score: { safety: -4, clinical: 1, protocol: 2 },
+        log: "차지 호출은 좋지만 bedside 관찰 없이 병실을 떠났습니다.",
+        tone: "warning",
+        effect: () => {
+          wardAction("chargeCalled");
+          wardAction("leftBedside");
+        },
+      },
+    ],
+  },
+  wardDeterioration: {
+    title: "점진적 악화",
+    text:
+      "모니터상 HR은 더 빨라지고 BP는 낮아지는 추세입니다. SpO₂ pleth도 약해지고 환자 말수가 줄었습니다. 차지를 부르면서도 bedside 중재를 계속해야 합니다.",
+    actions: [
+      {
+        label: "차지 간호사를 호출하고 현재 변화 추세를 보고한다",
+        next: "wardChargeNotify",
+        score: { safety: 6, clinical: 6, protocol: 5 },
+        log: "차지 호출: BP 감소, HR 증가, 처짐과 소변량 감소를 묶어 보고했습니다.",
+        tone: "good",
+        effect: () => wardAction("chargeCalled"),
+      },
+      {
+        label: "산소를 적용하고 SpO₂/pleth 반응을 본다",
+        next: "wardDeterioration",
+        score: { safety: 5, clinical: 4 },
+        log: "bedside 중재: 산소를 적용하고 SpO₂ 반응을 추적합니다.",
+        tone: "good",
+        effect: () => wardAction("oxygen"),
+      },
+      {
+        label: "ECG/SpO₂ 파형과 BP downtrend를 다시 읽는다",
+        next: "wardDeterioration",
+        score: { safety: 4, clinical: 5 },
+        log: "모니터 재확인: ECG, SpO₂ pleth, BP downtrend를 차지 보고 근거로 정리했습니다.",
+        tone: "good",
+        effect: () => wardAction("monitor"),
+      },
+      {
+        label: "IV line patency를 확인하고 수액 라인을 준비한다",
+        next: "wardDeterioration",
+        score: { safety: 5, clinical: 5, protocol: 3 },
+        log: "bedside 중재: IV 라인과 수액 연결 가능성을 확인했습니다.",
+        tone: "good",
+        effect: () => wardAction("ivCheck"),
+      },
+      {
+        label: "보호자에게 기다리라고 하고 다른 콜벨을 먼저 처리한다",
+        next: "wardDeterioration",
+        score: { safety: -8, clinical: -6, empathy: -3 },
+        log: "bedside 이탈: 불안정 추세에서 환자 곁을 비웠습니다.",
+        tone: "warning",
+        effect: () => wardAction("leftBedside"),
+      },
+    ],
+  },
+  wardChargeNotify: {
+    title: "차지 노티 중",
+    text:
+      "차지 간호사가 병실에 도착해 상황을 듣고 의사 노티를 시작합니다. 이제 핵심은 '차지가 전화하는 동안 액팅 간호사가 무엇을 계속하는가'입니다.",
+    actions: [
+      {
+        label: "차지 지시대로 repeat BP를 다시 측정한다",
+        next: "wardChargeNotify",
+        score: { safety: 5, clinical: 5, protocol: 3 },
+        log: "노티 중 행동: repeat BP를 재측정해 shock progression 여부를 계속 확인했습니다.",
+        tone: "good",
+        effect: () => wardAction("repeatBp"),
+      },
+      {
+        label: "산소 적용 상태와 SpO₂ 파형을 재확인한다",
+        next: "wardChargeNotify",
+        score: { safety: 4, clinical: 4 },
+        log: "노티 중 행동: 산소 적용과 SpO₂ 파형/수치를 재확인했습니다.",
+        tone: "good",
+        effect: () => wardAction("oxygen"),
+      },
+      {
+        label: "IV 라인을 열 수 있게 준비하고 차지에게 알린다",
+        next: "wardChargeNotify",
+        score: { safety: 5, clinical: 4, protocol: 3 },
+        log: "노티 중 행동: IV patency와 수액 준비 상태를 차지에게 공유했습니다.",
+        tone: "good",
+        effect: () => wardAction("ivCheck"),
+      },
+      {
+        label: "의식 변화와 피부/말초순환을 재사정한다",
+        next: "wardChargeNotify",
+        score: { safety: 5, clinical: 5, empathy: 2 },
+        log: "노티 중 행동: mental change, 피부색, 말초순환을 반복 사정했습니다.",
+        tone: "good",
+        effect: () => wardAction("mentalCheck"),
+      },
+      {
+        label: "차지에게 최신 BP/SpO₂/의식 변화를 업데이트한다",
+        next: "wardChargeNotify",
+        score: { safety: 4, clinical: 5, protocol: 4 },
+        log: "노티 중 업데이트: 차지에게 최신 BP, SpO₂, 의식 변화와 수행한 중재를 전달했습니다.",
+        tone: "good",
+        effect: () => wardAction("updateCharge"),
+      },
+      {
+        label: "차지가 전화 중이니 기다리며 아무것도 하지 않는다",
+        next: "wardChargeNotify",
+        score: { safety: -8, clinical: -8, protocol: -4 },
+        log: "노티 중 공백: 의사 연락을 기다리는 동안 bedside 재사정이 멈췄습니다.",
+        tone: "warning",
+        effect: () => wardAction("waited"),
+      },
+    ],
+  },
+  wardGoodEnd: {
+    title: "액팅 workflow 평가",
+    text:
+      "이상징후 발견, 차지 보고, 노티 중 bedside 재사정과 중재가 이어져 환자 악화 속도를 줄였습니다.",
+    actions: [
+      {
+        label: "처음 화면으로 돌아가기",
+        next: "wardIntro",
+        reset: true,
+      },
+    ],
+  },
+  wardBadEnd: {
+    title: "액팅 workflow 평가",
+    text:
+      "차지 호출 또는 bedside 지속 행동이 지연되어 환자 악화가 진행되었습니다. 신규 간호사 역할에서는 '보고 후에도 환자 곁에서 계속 할 일'이 중요합니다.",
+    actions: [
+      {
+        label: "다시 시도",
+        next: "wardIntro",
+        reset: true,
+      },
+    ],
+  },
   goodEnd: {
     title: "근무 평가",
     text:
@@ -1048,6 +1321,8 @@ const titleOptionsEl = document.querySelector("#title-options");
 const titleOptionsPanelEl = document.querySelector("#title-options-panel");
 const episodeLobbyEl = document.querySelector("#episode-lobby");
 const episodeStartEl = document.querySelector("#episode-start");
+const episodeStartAcsEl = document.querySelector("#episode-start-acs");
+const episodeStartWardEl = document.querySelector("#episode-start-ward");
 const episodeBackHomeEl = document.querySelector("#episode-back-home");
 const simulationHomeEl = document.querySelector("#simulation-home");
 let contextWindowDrag = null;
@@ -1288,12 +1563,16 @@ function renderOrderContextWindow() {
 }
 
 function renderSbarContextWindow() {
+  if (markAssessmentFinding("charge-nurse-sbar-briefing")) {
+    addLog("차지 간호사 도착: SBAR를 들은 뒤 담당의에게 노티하고, 당신은 bedside 재사정을 계속합니다.", "good");
+  }
+
   openContextWindow(
     "sbar",
-    "SBAR 보고",
-    "의사 연락 전 확보한 사정, 처치, 재사정 근거를 짧게 구성합니다.",
+    "차지 간호사 SBAR 보고",
+    "차지에게 확보한 사정, 처치, 재사정 근거를 짧게 보고합니다. 차지는 담당의 노티를 진행합니다.",
     createSbarBuilder(),
-    "Communication",
+    "Charge nurse",
   );
 }
 
@@ -1351,7 +1630,8 @@ function renderHandoffOverlay() {
 
   if (!isVisible) return;
 
-  handoffContentEl.innerHTML = "<ul>" + clinicalHandoff.map((item) =>
+  const handoffItems = isWardWorkflowEpisode() ? wardWorkflowHandoff : clinicalHandoff;
+  handoffContentEl.innerHTML = "<ul>" + handoffItems.map((item) =>
     "<li><span>" + item.label + "</span><strong>" + item.text + "</strong></li>"
   ).join("") + "</ul>";
 }
@@ -1359,6 +1639,13 @@ function renderHandoffOverlay() {
 function continueFromHandoff() {
   state.clinicalEntry.handoffComplete = true;
   state.clinicalEntry.chartExposed = true;
+  if (isWardWorkflowEpisode()) {
+    state.clinicalEntry.bedsideReleased = true;
+    state.stage = "wardIntro";
+    addLog("인계 완료: 601호 subtle warning을 확인하고 병실로 이동합니다.", "good");
+    render();
+    return;
+  }
   state.stage = "chartReview";
   addLog("인계 완료: 현재 우려점, PRN, 지속 ECG 모니터링 필요성을 확인했습니다.", "good");
   render();
@@ -1369,7 +1656,7 @@ function releaseBedsideFromEntry() {
   if (state.stage !== "chartReview" || state.clinicalEntry?.bedsideReleased) return;
 
   state.clinicalEntry.bedsideReleased = true;
-  state.stage = "intro";
+  state.stage = isWardWorkflowEpisode() ? "wardIntro" : "intro";
   addLog("차트 확인 후 침상 인계를 시작합니다. 환자에게 직접 접근할 수 있습니다.", "good");
   render();
 }
@@ -1459,6 +1746,7 @@ function renderClinicalData() {
 }
 
 function resetGame() {
+  state.currentEpisode = "acsChestPain";
   state.scores = {
     safety: 50,
     clinical: 50,
@@ -1559,8 +1847,43 @@ function resetGame() {
     collapsed: false,
     position: null,
   };
+  state.wardWorkflow = null;
+  state.chargeFollowUp = null;
   closeContextWindow();
   addLog("야간 근무 인계가 시작되었습니다. 환자 상태와 처방을 확인한 뒤 침상으로 들어갑니다.");
+}
+
+function setupWardWorkflowEpisode() {
+  state.currentEpisode = "wardWorkflow";
+  state.stage = "handoff";
+  state.clinicalEntry = {
+    handoffComplete: false,
+    chartExposed: false,
+    bedsideReleased: false,
+  };
+  state.monitorOn = true;
+  state.ekgAttached = true;
+  state.oxygenApplied = false;
+  state.patientStatus = {
+    pain: 1,
+    anxiety: 52,
+    breathing: 58,
+    cooperation: 62,
+  };
+  state.knownPatientInfo = {
+    pain: true,
+    breathing: true,
+    cardiacRisk: false,
+  };
+  state.wardWorkflow = createWardWorkflowState();
+  state.wardWorkflow.monitorAttached = true;
+  state.wardObjectScoreMarks = {};
+  state.chargeFollowUp = null;
+  state.logs = [];
+  state.eventHistory = [];
+  state.outcome = null;
+  state.elapsedMinutes = 0;
+  addLog("Ward Workflow 시작: 601호 bedside monitor가 이미 연결되어 있습니다. 파형과 환자 상태를 근거로 차지에게 보고하세요.", "good");
 }
 
 function openEpisodeLobby() {
@@ -1598,13 +1921,14 @@ function startEpisode(episodeId = "acsChestPain") {
   }
 
   resetGame();
+  if (episodeId === "wardWorkflow") setupWardWorkflowEpisode();
   titleScreenEl.hidden = true;
   episodeLobbyEl.hidden = true;
   document.body.classList.remove("title-active");
   document.body.classList.remove("lobby-active");
   closeEmr();
   render();
-  showBeginnerOnboardingHints();
+  if (episodeId === "acsChestPain") showBeginnerOnboardingHints();
 }
 
 function shuffleProcedureOptions() {
@@ -1735,6 +2059,11 @@ function syncCompletedAssessments() {
     "prnDecision",
     "persistentSymptoms",
     "sbarBuild",
+    "postSbarBedside",
+    "wardIntro",
+    "wardBaseline",
+    "wardDeterioration",
+    "wardChargeNotify",
     "goodEnd",
   ];
 
@@ -1753,8 +2082,262 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function createWardWorkflowState() {
+  return {
+    perfusion: 61,
+    oxygenation: 92,
+    consciousness: 72,
+    urineOutput: 32,
+    shockRisk: 32,
+    bedsidePresence: true,
+    repeatBpCount: 0,
+    oxygenApplied: false,
+    monitorAttached: false,
+    ivChecked: false,
+    mentalChecks: 0,
+    chargeCalled: false,
+    chargeAtBedside: false,
+    notifyingDoctor: false,
+    notificationTicks: 0,
+    waitedTicks: 0,
+    leftBedsideTicks: 0,
+    updatedCharge: false,
+    lastInstruction: "",
+  };
+}
+
+function isWardWorkflowEpisode() {
+  return state.currentEpisode === "wardWorkflow";
+}
+
+function wardWorkflowReadyActions() {
+  const ward = state.wardWorkflow || {};
+  return {
+    repeatBp: ward.repeatBpCount >= 2,
+    oxygen: ward.oxygenApplied,
+    monitor: ward.monitorAttached || state.monitorOn,
+    iv: ward.ivChecked,
+    charge: ward.chargeCalled,
+    mental: ward.mentalChecks >= 1,
+    updateCharge: Boolean(ward.updatedCharge),
+    bedside: ward.bedsidePresence && ward.leftBedsideTicks === 0,
+  };
+}
+
+function wardInstruction() {
+  const ward = state.wardWorkflow || createWardWorkflowState();
+  const vitals = currentVitals();
+  const [systolic = 0] = String(vitals.bp).split("/").map(Number);
+
+  if (vitals.spo2 <= 92 && !ward.oxygenApplied) return "차지: 산소 먼저 주세요. 저는 의사 노티할게요.";
+  if (systolic < 94 && ward.repeatBpCount < 2) return "차지: 혈압 다시 재고 IV 라인 확인해주세요.";
+  if (!ward.ivChecked) return "차지: 수액 열 수 있게 IV patency 먼저 봐주세요.";
+  if (ward.mentalChecks < 2) return "차지: 의식 변화 계속 봐주세요. 보호자는 잠깐 뒤로 물려주세요.";
+  return "차지: 좋아요. 저는 의사 노티 중이니 bedside에서 BP, SpO₂, mental 계속 봐주세요.";
+}
+
+function wardBedsideFollowUpComplete(actions = wardWorkflowReadyActions()) {
+  return actions.charge &&
+    actions.repeatBp &&
+    actions.oxygen &&
+    actions.monitor &&
+    actions.iv &&
+    actions.mental &&
+    actions.updateCharge &&
+    actions.bedside;
+}
+
+function refreshBedsidePhysiologyDisplay() {
+  updateClinicalUrgency();
+  renderVitals();
+  renderPatientStatus();
+  renderLogs();
+  if (state.contextWindowType) refreshActiveContextWindow();
+  window.update3D?.(state, state.monitorOn ? currentVitals() : null);
+  if (!ecgProcedureOverlayEl?.hidden) renderEcgMonitoringOverlay("review");
+}
+
+function wardAction(action) {
+  if (!state.wardWorkflow) state.wardWorkflow = createWardWorkflowState();
+  const ward = state.wardWorkflow;
+  ward.bedsidePresence = action !== "leftBedside";
+
+  if (action === "mentalCheck") {
+    ward.mentalChecks += 1;
+    ward.consciousness = clamp(ward.consciousness + 4, 0, 100);
+    ward.shockRisk = clamp(ward.shockRisk - 2, 0, 100);
+    state.patientStatus.cooperation = clamp(state.patientStatus.cooperation + 2, 0, 100);
+  }
+
+  if (action === "repeatBp") {
+    ward.repeatBpCount += 1;
+    ward.perfusion = clamp(ward.perfusion + 4, 0, 100);
+    ward.shockRisk = clamp(ward.shockRisk - 3, 0, 100);
+  }
+
+  if (action === "monitor") {
+    ward.monitorAttached = true;
+    state.monitorOn = true;
+    state.ekgAttached = true;
+    ward.shockRisk = clamp(ward.shockRisk - 2, 0, 100);
+  }
+
+  if (action === "oxygen") {
+    ward.oxygenApplied = true;
+    state.oxygenApplied = true;
+    state.monitorOn = true;
+    state.ekgAttached = true;
+    ward.oxygenation = clamp(ward.oxygenation + 7, 0, 100);
+    ward.shockRisk = clamp(ward.shockRisk - 4, 0, 100);
+    state.patientStatus.breathing = clamp(state.patientStatus.breathing - 5, 0, 100);
+    state.patientStatus.anxiety = clamp(state.patientStatus.anxiety - 3, 0, 100);
+  }
+
+  if (action === "ivCheck") {
+    ward.ivChecked = true;
+    ward.perfusion = clamp(ward.perfusion + 6, 0, 100);
+    ward.shockRisk = clamp(ward.shockRisk - 5, 0, 100);
+  }
+
+  if (action === "chargeCalled") {
+    ward.chargeCalled = true;
+    ward.chargeAtBedside = true;
+    ward.notifyingDoctor = true;
+    ward.lastInstruction = wardInstruction();
+    addLog(ward.lastInstruction, "good");
+  }
+
+  if (action === "leftBedside") {
+    ward.leftBedsideTicks += 1;
+    ward.bedsidePresence = false;
+    ward.shockRisk = clamp(ward.shockRisk + 10, 0, 100);
+    ward.oxygenation = clamp(ward.oxygenation - 3, 0, 100);
+    ward.perfusion = clamp(ward.perfusion - 4, 0, 100);
+  }
+
+  if (action === "waited") {
+    ward.waitedTicks += 1;
+    ward.shockRisk = clamp(ward.shockRisk + 8, 0, 100);
+    ward.oxygenation = clamp(ward.oxygenation - 2, 0, 100);
+    ward.consciousness = clamp(ward.consciousness - 3, 0, 100);
+  }
+
+  if (action === "updateCharge") {
+    ward.updatedCharge = true;
+    ward.shockRisk = clamp(ward.shockRisk - 2, 0, 100);
+    ward.lastInstruction = "차지: 업데이트 확인했어요. 그 상태 그대로 보고할게요. 환자 곁에서 계속 BP와 SpO₂ 봐주세요.";
+    addLog(ward.lastInstruction, "good");
+  }
+
+  if (action !== "updateCharge") ward.lastInstruction = ward.chargeCalled ? wardInstruction() : ward.lastInstruction;
+  refreshBedsidePhysiologyDisplay();
+
+  if (ward.notifyingDoctor && wardBedsideFollowUpComplete()) {
+    setWardOutcome("stabilized", "차지 노티 중 repeat BP, 산소, 모니터, IV 확인, mental reassessment와 최신 상태 업데이트를 이어갔습니다.", [
+      "차지 호출 후 bedside 역할 유지",
+      "repeat BP/SpO₂/mental 재사정 수행",
+      "IV와 산소 준비 완료",
+      "최신 상태를 차지에게 업데이트",
+    ]);
+  }
+}
+
+function ensureChargeFollowUp() {
+  if (!state.chargeFollowUp) {
+    state.chargeFollowUp = {
+      active: false,
+      pain: false,
+      vitals: false,
+      monitor: false,
+      oxygen: false,
+      updateCharge: false,
+      waited: 0,
+    };
+  }
+
+  return state.chargeFollowUp;
+}
+
+function chargeFollowUpReadyCount() {
+  const followUp = ensureChargeFollowUp();
+  return ["pain", "vitals", "monitor", "oxygen", "updateCharge"].filter((key) => followUp[key]).length;
+}
+
+function chargeFollowUpAction(action) {
+  const followUp = ensureChargeFollowUp();
+  followUp.active = true;
+
+  if (action === "waited") {
+    followUp.waited += 1;
+    applyPatientImpact({ anxiety: 4, breathing: 3 });
+    if (isWardWorkflowEpisode() && state.wardWorkflow) {
+      state.wardWorkflow.shockRisk = clamp(state.wardWorkflow.shockRisk + 8, 0, 100);
+      state.wardWorkflow.oxygenation = clamp(state.wardWorkflow.oxygenation - 2, 0, 100);
+    }
+    refreshBedsidePhysiologyDisplay();
+    if (followUp.waited >= 2) {
+      setPatientOutcome("deteriorated", "차지 노티 중 bedside 재사정이 지연되었습니다.", [
+        "노티 중 repeat BP/SpO₂ 확인 지연",
+        "환자 곁에서 지속 관찰 부족",
+      ]);
+    }
+    return;
+  }
+
+  followUp[action] = true;
+
+  if (action === "vitals") {
+    markAssessmentComplete("vitals");
+    addPostPrnReassessmentLog("vitals");
+    if (isWardWorkflowEpisode() && state.wardWorkflow) wardAction("repeatBp");
+  }
+
+  if (action === "pain") {
+    markAssessmentComplete("pain");
+    addPostPrnReassessmentLog("pain");
+    if (isWardWorkflowEpisode() && state.wardWorkflow) wardAction("mentalCheck");
+  }
+
+  if (action === "monitor") {
+    markAssessmentComplete("ecgReview");
+    addPostPrnReassessmentLog("ecgReview");
+    state.monitorOn = true;
+    state.ekgAttached = true;
+    if (isWardWorkflowEpisode() && state.wardWorkflow) wardAction("monitor");
+  }
+
+  if (action === "oxygen") {
+    state.oxygenApplied = true;
+    state.monitorOn = true;
+    state.ekgAttached = true;
+    beginFollowUpObservation("oxygen", "Low-flow oxygen");
+    applyPatientImpact({ breathing: -4, anxiety: -2 });
+    if (isWardWorkflowEpisode() && state.wardWorkflow) wardAction("oxygen");
+  }
+
+  if (action === "updateCharge" && isWardWorkflowEpisode() && state.wardWorkflow) {
+    state.wardWorkflow.shockRisk = clamp(state.wardWorkflow.shockRisk - 2, 0, 100);
+  }
+
+  refreshBedsidePhysiologyDisplay();
+
+  if (chargeFollowUpReadyCount() >= 4) {
+    const outcome = sbarOutcomeForTrajectory(getClinicalTrajectory());
+    setPatientOutcome(outcome.type, "차지 노티 중 bedside 재사정과 최신 상태 업데이트를 이어갔습니다.", [
+      "차지 SBAR 후 bedside follow-up 수행",
+      ...outcome.details,
+    ]);
+  }
+}
+
 function choose(action) {
   if (action.reset) {
+    if (isWardWorkflowEpisode()) {
+      setupWardWorkflowEpisode();
+      state.stage = "wardIntro";
+      render();
+      return;
+    }
     resetGame();
     render();
     return;
@@ -1770,6 +2353,8 @@ function choose(action) {
   if (action.effect) {
     action.effect();
   }
+
+  if (state.outcome) return;
 
   state.stage = action.next;
   render();
@@ -1952,7 +2537,7 @@ function addPostPrnRequiredLog(missing) {
 }
 
 function patientHistoryReviewed() {
-  return state.assessed || requiredHistoryQuestions().every((question) => state.askedQuestions.includes(question.id));
+  return requiredHistoryQuestions().every((question) => state.askedQuestions.includes(question.id));
 }
 
 function missingAssessmentLabels(requirements = []) {
@@ -2097,6 +2682,12 @@ function usePulseOxOnPatient() {
 }
 
 function useOxygenMaskOnPatient() {
+  if (isWardWorkflowEpisode() && state.wardWorkflow) {
+    performWardObjectAction("wardOxygen");
+    clearActiveTool();
+    return;
+  }
+
   const missing = missingAssessmentLabels(["vitals"]);
 
   if (missing.length > 0) {
@@ -2369,11 +2960,11 @@ function beginSbarFromCommunicationDevice() {
   closePhysicianContact();
   const readiness = sbarReadinessSummary();
   if (!readiness.escalationNeeded) {
-    addLog("의사 연락: 즉시 보고할 근거가 약합니다. 사정과 모니터링 자료를 보완하세요.", "warning");
+    addLog("차지 호출: 즉시 노티할 근거가 약합니다. 사정과 모니터링 자료를 보완하세요.", "warning");
   } else if (readiness.score < 80) {
-    addLog("의사 연락: SBAR 보고를 시작하지만 일부 임상 자료가 부족합니다.", "warning");
+    addLog("차지 호출: SBAR 보고를 시작하지만 일부 임상 자료가 부족합니다.", "warning");
   } else {
-    addLog("의사 연락: SBAR 보고 준비가 충분합니다.", "good");
+    addLog("차지 호출: SBAR 보고 준비가 충분합니다. 차지가 담당의 노티를 준비합니다.", "good");
   }
   state.stage = "sbarBuild";
   render();
@@ -2395,17 +2986,17 @@ function openPhysicianContact() {
   physicianContactEl.hidden = false;
   physicianContactEl.innerHTML =
     "<section class=\"physician-contact-card " + (readiness.escalationNeeded ? "ready" : "not-ready") + "\">" +
-    "<header><span>의사 연락</span><button type=\"button\" data-contact-close aria-label=\"의사 연락 닫기\">닫기</button></header>" +
-    "<strong>" + (readiness.escalationNeeded ? "보고 필요성 확인" : "보고 전 근거 보완 필요") + "</strong>" +
-    "<p>현재 urgency: " + urgencyText + ". SBAR 준비도는 " + readiness.strength + " (" + readiness.completed + "/" + readiness.total + ")입니다.</p>" +
+    "<header><span>차지 간호사</span><button type=\"button\" data-contact-close aria-label=\"차지 간호사 창 닫기\">닫기</button></header>" +
+    "<strong>" + (readiness.escalationNeeded ? "차지가 bedside로 와서 보고를 받습니다" : "차지: 보고 전 근거를 조금 더 모아주세요") + "</strong>" +
+    "<p>현재 urgency: " + urgencyText + ". 차지에게 전달할 SBAR 준비도는 " + readiness.strength + " (" + readiness.completed + "/" + readiness.total + ")입니다. 차지는 보고를 듣고 담당의 노티를 진행합니다.</p>" +
     "<ul>" + list + "</ul>" +
-    "<div class=\"physician-contact-actions\"><button type=\"button\" class=\"primary\" data-contact-sbar>SBAR 보고 시작</button><button type=\"button\" data-contact-close>침상 사정 계속</button></div>" +
+    "<div class=\"physician-contact-actions\"><button type=\"button\" class=\"primary\" data-contact-sbar>차지에게 SBAR 보고</button><button type=\"button\" data-contact-close>침상 사정 계속</button></div>" +
     "</section>";
   physicianContactEl.querySelectorAll("[data-contact-close]").forEach((button) => {
     button.addEventListener("click", closePhysicianContact);
   });
   physicianContactEl.querySelector("[data-contact-sbar]")?.addEventListener("click", beginSbarFromCommunicationDevice);
-  addLog("의사 연락 장치: SBAR 보고 준비도를 확인했습니다.", readiness.escalationNeeded ? "good" : "warning");
+  addLog("차지 간호사 호출: SBAR 보고 준비도를 확인했습니다.", readiness.escalationNeeded ? "good" : "warning");
 }
 function handleToolTarget(toolId, target) {
   const tool = bedsideTools[toolId];
@@ -2429,6 +3020,15 @@ function handleClinicalTargetClick(target) {
   if (entryFlowActive()) {
     addLog("인계와 차트 확인을 마친 뒤 침상 상호작용을 시작합니다.", "warning");
     return true;
+  }
+
+  if (state.activeTool) {
+    handleToolTarget(state.activeTool, target);
+    return true;
+  }
+
+  if (isWardWorkflowEpisode() && ["patient", "monitor", "iv", "charge", "communication"].includes(target)) {
+    return false;
   }
 
   if (!state.activeTool && target === "medication" && state.stage === "prnDecision") {
@@ -2456,9 +3056,7 @@ function handleClinicalTargetClick(target) {
     return true;
   }
 
-  if (!state.activeTool) return false;
-  handleToolTarget(state.activeTool, target);
-  return true;
+  return false;
 }
 
 toolButtons.forEach((button) => {
@@ -2526,7 +3124,126 @@ const clinicalInteractionMenus = {
       { id: "reviewLabs", label: "검사 확인" },
     ],
   },
+  iv: {
+    title: "IV 라인",
+    role: "수액 연결 가능성, 막힘/부종, line patency를 bedside에서 확인합니다.",
+    actions: [
+      { id: "wardIvCheck", label: "IV patency 확인하고 수액 라인 준비" },
+    ],
+  },
+  charge: {
+    title: "차지 간호사",
+    role: "차지에게 상황을 보고하고, 의사 노티 중 최신 bedside 상태를 업데이트합니다.",
+    actions: [
+      { id: "wardCallCharge", label: "HR/BP/SpO₂ 추세를 묶어 보고" },
+      { id: "wardUpdateCharge", label: "최신 BP/SpO₂/의식 변화 업데이트" },
+    ],
+  },
+  communication: {
+    title: "연락 장비",
+    role: "차지 간호사를 부르거나 SBAR 보고를 시작합니다.",
+    actions: [
+      { id: "wardCallCharge", label: "차지 호출" },
+      { id: "openSbar", label: "차지 SBAR 보고" },
+    ],
+  },
 };
+
+const wardClinicalInteractionMenus = {
+  patient: {
+    title: "환자 bedside 사정",
+    role: "환자의 반응, 의식, 피부/말초순환, 산소 적용 반응을 직접 확인합니다.",
+    actions: [
+      { id: "wardMentalCheck", label: "의식 변화와 피부/말초순환 재사정" },
+      { id: "wardOxygen", label: "산소 적용하고 SpO₂ 반응 확인" },
+    ],
+  },
+  monitor: {
+    title: "침상 모니터",
+    role: "이미 연결된 bedside monitor의 HR, NIBP, SpO₂ pleth와 ECG 파형을 근거로 판단합니다.",
+    actions: [
+      { id: "wardRepeatBp", label: "repeat BP 측정" },
+      { id: "wardMonitor", label: "ECG/SpO₂ 파형과 BP downtrend 읽기" },
+      { id: "expandEcg", label: "모니터 화면 확대 관찰" },
+    ],
+  },
+  iv: clinicalInteractionMenus.iv,
+  charge: clinicalInteractionMenus.charge,
+  communication: clinicalInteractionMenus.communication,
+  emr: clinicalInteractionMenus.emr,
+  chart: clinicalInteractionMenus.chart,
+};
+
+function clinicalMenuForTarget(target) {
+  if (isWardWorkflowEpisode() && wardClinicalInteractionMenus[target]) return wardClinicalInteractionMenus[target];
+  return clinicalInteractionMenus[target];
+}
+
+function wardInteractionStatus(actionId) {
+  const ward = state.wardWorkflow || {};
+  const status = {
+    wardMentalCheck: ward.mentalChecks >= 1,
+    wardOxygen: Boolean(ward.oxygenApplied),
+    wardRepeatBp: ward.repeatBpCount >= 2,
+    wardMonitor: Boolean(ward.monitorAttached),
+    wardIvCheck: Boolean(ward.ivChecked),
+    wardCallCharge: Boolean(ward.chargeCalled),
+    wardUpdateCharge: Boolean(ward.updatedCharge),
+  };
+  return Boolean(status[actionId]);
+}
+
+function performWardObjectAction(actionId) {
+  const actionById = {
+    wardMentalCheck: "mentalCheck",
+    wardOxygen: "oxygen",
+    wardRepeatBp: "repeatBp",
+    wardMonitor: "monitor",
+    wardIvCheck: "ivCheck",
+    wardCallCharge: "chargeCalled",
+    wardUpdateCharge: "updateCharge",
+  };
+  const wardActionId = actionById[actionId];
+  if (!wardActionId) return false;
+
+  if (!state.wardObjectScoreMarks) state.wardObjectScoreMarks = {};
+  const scoreKey = state.stage + ":" + actionId;
+  const wardScoreById = {
+    wardMentalCheck: { safety: 4, clinical: 5, empathy: 2 },
+    wardOxygen: { safety: 5, clinical: 4 },
+    wardRepeatBp: { safety: 5, clinical: 5, protocol: 2 },
+    wardMonitor: { safety: 3, clinical: 5 },
+    wardIvCheck: { safety: 5, clinical: 4, protocol: 3 },
+    wardCallCharge: { safety: 6, clinical: 6, protocol: 5 },
+    wardUpdateCharge: { safety: 4, clinical: 5, protocol: 4 },
+  };
+  if (!state.wardObjectScoreMarks[scoreKey]) {
+    applyScore(wardScoreById[actionId]);
+    state.wardObjectScoreMarks[scoreKey] = true;
+  }
+
+  const wardObjectLogById = {
+    wardMentalCheck: "bedside 사정: 의식 변화와 피부/말초순환을 직접 재확인했습니다.",
+    wardOxygen: "bedside 중재: O2 마스크를 적용하고 SpO₂/pleth 반응을 확인했습니다.",
+    wardRepeatBp: "모니터 기반 사정: repeat BP를 측정해 BP downtrend를 확인했습니다.",
+    wardMonitor: "모니터 해석: ECG, SpO₂ pleth, NIBP 추세를 다시 읽었습니다.",
+    wardIvCheck: "IV 확인: line patency와 수액 연결 가능성을 확인했습니다.",
+    wardCallCharge: "차지 호출: HR/BP/SpO₂ 추세와 처진 반응을 묶어 보고했습니다.",
+    wardUpdateCharge: "차지 업데이트: 최신 BP, SpO₂, 의식 변화를 차지에게 다시 전달했습니다.",
+  };
+  addLog(wardObjectLogById[actionId], "good");
+
+  wardAction(wardActionId);
+
+  if (wardActionId === "chargeCalled") {
+    state.stage = "wardChargeNotify";
+  } else if (["wardIntro", "wardBaseline"].includes(state.stage)) {
+    state.stage = "wardDeterioration";
+  }
+
+  render();
+  return true;
+}
 
 
 function chooseSceneAction(actionIndex) {
@@ -2541,7 +3258,7 @@ function chooseSceneAction(actionIndex) {
 function openClinicalInteractionMenu(target, point = {}) {
   syncCompletedAssessments();
 
-  const menu = clinicalInteractionMenus[target];
+  const menu = clinicalMenuForTarget(target);
 
   if (!interactionMenuEl || !menu) return;
 
@@ -2564,7 +3281,7 @@ function openClinicalInteractionMenu(target, point = {}) {
 
   menu.actions.forEach((item) => {
     const button = document.createElement("button");
-    const completed = isAssessmentComplete(item.assessment);
+    const completed = item.id.startsWith("ward") ? wardInteractionStatus(item.id) : isAssessmentComplete(item.assessment);
     const lock = lockedActionInfo(target, item.id);
     const statusText = lock.locked ? "사정 필요" : completed ? "완료" : "대기";
     button.type = "button";
@@ -2577,7 +3294,7 @@ function openClinicalInteractionMenu(target, point = {}) {
     const historyProgress = item.id === "history" ? answeredRequiredCount() + "/" + requiredHistoryQuestions().length : "";
     const actionStatus = item.id === "history"
       ? (patientHistoryReviewed() ? "완료" : state.stage === "historyTaking" ? "진행" : "대화")
-      : item.assessment || lock.locked ? statusText : "선택";
+      : item.id.startsWith("ward") || item.assessment || lock.locked ? statusText : "선택";
     button.innerHTML = `
       <span>${actionStatus}</span>
       <strong>${item.label}</strong>
@@ -2733,6 +3450,16 @@ function closeEcgProcedureOverlay() {
 }
 
 function handleClinicalMenuAction(target, actionId) {
+  if (isWardWorkflowEpisode() && actionId.startsWith("ward")) {
+    performWardObjectAction(actionId);
+    return;
+  }
+
+  if (target === "communication") {
+    if (actionId === "openSbar") beginSbarFromCommunicationDevice();
+    return;
+  }
+
   const lock = lockedActionInfo(target, actionId);
 
   if (lock.locked) {
@@ -2989,7 +3716,7 @@ emrContentEl?.addEventListener("click", (event) => {
 
 
 function isPatientLoopActive() {
-  return !entryFlowActive() && !state.outcome && !["goodEnd", "badEnd"].includes(state.stage);
+  return !entryFlowActive() && !state.outcome && !["goodEnd", "badEnd", "wardGoodEnd", "wardBadEnd"].includes(state.stage);
 }
 
 function hasActiveClinicalIntervention() {
@@ -3003,6 +3730,61 @@ function hasActiveClinicalIntervention() {
 
 
 function calculateClinicalUrgency() {
+  if (isWardWorkflowEpisode()) {
+    const vitals = currentVitals();
+    const ward = state.wardWorkflow || createWardWorkflowState();
+    const [systolic = 0] = String(vitals.bp).split("/").map(Number);
+    let score = 0;
+    const drivers = [];
+
+    if (systolic < 90) {
+      score += 4;
+      drivers.push("hypotension");
+    } else if (systolic < 100) {
+      score += 2;
+      drivers.push("borderline BP");
+    }
+
+    if (vitals.hr >= 128) {
+      score += 3;
+      drivers.push("marked tachycardia");
+    } else if (vitals.hr >= 112) {
+      score += 2;
+      drivers.push("rising HR");
+    }
+
+    if (vitals.spo2 <= 90) {
+      score += 4;
+      drivers.push("critical SpO₂");
+    } else if (vitals.spo2 <= 93) {
+      score += 2;
+      drivers.push("falling SpO₂");
+    }
+
+    if (ward.consciousness <= 62) {
+      score += 3;
+      drivers.push("mental change");
+    } else if (ward.consciousness <= 72) {
+      score += 1;
+      drivers.push("drowsy");
+    }
+
+    if (ward.urineOutput <= 30) {
+      score += 2;
+      drivers.push("low urine output");
+    }
+
+    const level = score >= 8 ? "critical" : score >= 6 ? "severe" : score >= 3 ? "moderate" : "mild";
+    const label = {
+      mild: "낮음",
+      moderate: "주의",
+      severe: "높음",
+      critical: "위급",
+    }[level];
+
+    return { level, score, label, drivers, vitals };
+  }
+
   const vitals = currentVitals();
   let score = 0;
   const drivers = [];
@@ -3439,6 +4221,11 @@ function updateFollowUpObservationCues() {
 function tickPatientState() {
   if (!isPatientLoopActive()) return;
 
+  if (isWardWorkflowEpisode()) {
+    tickWardWorkflowState();
+    return;
+  }
+
   const urgency = updateClinicalUrgency({ log: true });
   const interventionActive = hasActiveClinicalIntervention();
   const earlyDeteriorationRamp = interventionActive ? 1 : clamp((state.elapsedMinutes + 1) / 8, 0.45, 1);
@@ -3489,6 +4276,83 @@ function tickPatientState() {
   renderLogs();
   if (state.emrOpened) renderEmr();
   window.update3D?.(state, state.monitorOn ? currentVitals() : null);
+}
+
+function tickWardWorkflowState() {
+  if (!state.wardWorkflow) state.wardWorkflow = createWardWorkflowState();
+  const ward = state.wardWorkflow;
+  const inActiveWardStage = ["wardBaseline", "wardDeterioration", "wardChargeNotify"].includes(state.stage);
+  if (!inActiveWardStage) return;
+
+  const noBedsideAction = ward.notifyingDoctor && ward.repeatBpCount < 2 && !ward.oxygenApplied && !ward.ivChecked;
+  const bedsidePenalty = ward.bedsidePresence ? 0 : 7;
+  const notifyPenalty = ward.notifyingDoctor && noBedsideAction ? 3 : 0;
+  const monitorRelief = ward.monitorAttached ? 1.4 : 0;
+  const oxygenRelief = ward.oxygenApplied ? 1.8 : 0;
+  const ivRelief = ward.ivChecked ? 1.6 : 0;
+  const netShock = 2.8 + bedsidePenalty + notifyPenalty - monitorRelief - oxygenRelief - ivRelief;
+
+  ward.shockRisk = clamp(ward.shockRisk + netShock, 0, 100);
+  ward.perfusion = clamp(ward.perfusion - 1.6 - ward.shockRisk / 75 + ivRelief * 0.35, 0, 100);
+  ward.oxygenation = clamp(ward.oxygenation - 0.9 - ward.shockRisk / 95 + oxygenRelief * 0.55, 0, 100);
+  ward.consciousness = clamp(ward.consciousness - 0.8 - ward.shockRisk / 110 + ward.mentalChecks * 0.08, 0, 100);
+  ward.urineOutput = clamp(ward.urineOutput - 0.6 - ward.shockRisk / 130, 0, 100);
+  ward.notificationTicks += ward.notifyingDoctor ? 1 : 0;
+  state.elapsedMinutes += 1;
+
+  const urgency = updateClinicalUrgency({ log: true });
+  const actions = wardWorkflowReadyActions();
+  const vitals = currentVitals();
+  const [systolic = 0] = String(vitals.bp).split("/").map(Number);
+  const bedsideFollowUpComplete = wardBedsideFollowUpComplete(actions);
+
+  if (ward.notifyingDoctor && ward.notificationTicks % 2 === 1) {
+    addLog(wardInstruction(), urgency.level === "critical" ? "warning" : "good");
+  }
+
+  if (ward.notificationTicks >= 2 && (urgency.level === "critical" || systolic < 82 || vitals.spo2 <= 86 || ward.consciousness <= 48)) {
+    setWardOutcome("deteriorated", "차지 노티 전후 bedside 대응이 늦어 shock progression이 진행되었습니다.", [
+      "SBP " + vitals.bp,
+      "SpO₂ " + vitals.spo2 + "%",
+      "의식 저하와 소변량 감소 지속",
+    ]);
+    return;
+  }
+
+  if (ward.notifyingDoctor && ward.notificationTicks >= 4 && bedsideFollowUpComplete && urgency.level !== "severe") {
+    setWardOutcome("stabilized", "차지 노티 중 repeat BP, 산소, 모니터, IV 확인과 mental reassessment가 이어져 환자가 안정화 추세입니다.", [
+      "차지 호출 후 bedside 역할 유지",
+      "repeat BP/SpO₂/mental 재사정 수행",
+      "IV와 산소 준비 완료",
+      "최신 상태를 차지에게 업데이트",
+    ]);
+    return;
+  }
+
+  renderVitals();
+  renderPatientStatus();
+  renderLogs();
+  window.update3D?.(state, state.monitorOn ? currentVitals() : null);
+}
+
+function setWardOutcome(type, reason, details = []) {
+  if (state.outcome) return;
+
+  const urgency = state.urgency || calculateClinicalUrgency();
+  const vitals = currentVitals();
+  state.outcome = {
+    type,
+    reason,
+    details,
+    minute: state.elapsedMinutes,
+    vitals,
+    urgency,
+    actions: wardWorkflowReadyActions(),
+  };
+  state.stabilized = type === "stabilized";
+  state.stage = type === "stabilized" ? "wardGoodEnd" : "wardBadEnd";
+  addLog(type === "stabilized" ? "결과: 액팅 workflow가 안정화에 기여했습니다." : "결과: 병동 workflow 공백으로 환자가 악화되었습니다.", type === "stabilized" ? "good" : "bad");
+  render();
 }
 
 function startPatientStateLoop() {
@@ -3624,6 +4488,8 @@ function handlePatientMenuAction(actionId) {
   }
 
   if (actionId === "history") {
+    const hasMissingHistory = !patientHistoryReviewed();
+
     if (state.stage === "intro") {
       const introduced = chooseSceneAction(0);
       const started = introduced && state.stage === "rapport" ? chooseSceneAction(0) : false;
@@ -3638,6 +4504,12 @@ function handlePatientMenuAction(actionId) {
     }
 
     if (state.stage === "historyTaking") {
+      openPatientHistoryConversation(currentInteractionPoint());
+      return;
+    }
+
+    if (hasMissingHistory && !state.outcome) {
+      addLog("흉통 문진 보완: 아직 확인하지 않은 핵심 질문을 다시 엽니다.", "good");
       openPatientHistoryConversation(currentInteractionPoint());
       return;
     }
@@ -3724,6 +4596,37 @@ function monitorClinicalInterpretation() {
   return { rhythm, observations, urgencyLabel: urgency.label, urgencyLevel: urgency.level, vitals };
 }
 
+function plethWaveShape(phase) {
+  if (phase < 0.08) return phase / 0.08;
+  if (phase < 0.18) return 1 - ((phase - 0.08) / 0.1) * 0.18;
+  if (phase < 0.32) return 0.82 - ((phase - 0.18) / 0.14) * 0.3;
+  if (phase < 0.4) return 0.52 - Math.sin(((phase - 0.32) / 0.08) * Math.PI) * 0.16;
+  if (phase < 0.54) return 0.44 + Math.sin(((phase - 0.4) / 0.14) * Math.PI) * 0.12;
+  return Math.max(0, 0.44 * (1 - (phase - 0.54) / 0.46));
+}
+
+function createPlethSvgPoints(vitals, width = 520, height = 72) {
+  const spo2 = Number(vitals?.spo2 || 98);
+  const rr = Number(vitals?.rr || 20);
+  const perfusionLoss = clamp((94 - spo2) / 10, 0, 0.65);
+  const baseline = height * 0.68;
+  const amplitude = 26 * (1 - perfusionLoss * 0.45);
+  const beatWidth = clamp(82 - (Number(vitals?.hr || 108) - 95) * 0.16, 62, 88);
+  const breathingEffort = clamp((rr - 18) / 16 + Math.max(0, 94 - spo2) / 9, 0, 1);
+  const points = [];
+
+  for (let x = 0; x <= width; x += 5) {
+    const phase = ((x % beatWidth) + beatWidth) % beatWidth / beatWidth;
+    const shape = plethWaveShape(phase);
+    const respiratoryVariation = Math.sin(x * 0.018) * (2.1 + breathingEffort * 1.4);
+    const artifact = Math.sin(x * 0.31) * perfusionLoss * 3.2;
+    const y = baseline - shape * amplitude + respiratoryVariation + artifact;
+    points.push(`${x.toFixed(0)},${clamp(y, 8, height - 8).toFixed(1)}`);
+  }
+
+  return points.join(" ");
+}
+
 function renderEcgMonitoringOverlay(mode = "review") {
   if (!ecgProcedureOverlayEl) return;
 
@@ -3736,6 +4639,7 @@ function renderEcgMonitoringOverlay(mode = "review") {
   const hrClass = vitals.hr >= 128 ? "critical" : vitals.hr >= 116 ? "warning" : "stable";
   const rrClass = vitals.rr >= 30 ? "critical" : vitals.rr >= 24 ? "warning" : "stable";
   const urgencyClass = interpretation.urgencyLevel === "critical" || interpretation.urgencyLevel === "severe" ? "critical" : interpretation.urgencyLevel === "moderate" ? "warning" : "stable";
+  const plethPoints = createPlethSvgPoints(vitals);
   const shell = document.createElement("div");
   shell.className = "ecg-monitoring-shell monitor-focused";
   shell.innerHTML =
@@ -3745,7 +4649,7 @@ function renderEcgMonitoringOverlay(mode = "review") {
         "<div class=\"device-monitor-grid\">" +
           "<section class=\"device-wave-stack\" aria-label=\"bedside monitor waveforms\">" +
             "<div class=\"device-wave-row ecg\"><span>ECG II</span><svg viewBox=\"0 0 520 86\" role=\"img\" aria-label=\"ECG waveform\"><polyline points=\"0,47 42,47 54,40 64,47 82,47 94,16 104,70 118,47 166,47 178,39 190,47 236,47 248,18 260,68 276,47 326,47 338,39 350,47 398,47 410,17 422,70 438,47 486,47 498,39 520,47\" /></svg></div>" +
-            "<div class=\"device-wave-row pleth\"><span>PLETH</span><svg viewBox=\"0 0 520 72\" role=\"img\" aria-label=\"SpO2 pleth waveform\"><polyline points=\"0,48 24,47 44,42 60,22 74,34 88,46 118,49 146,47 168,41 184,23 198,35 214,47 244,50 272,47 294,42 310,22 324,34 340,46 370,50 398,47 420,41 436,23 450,35 466,47 496,50 520,48\" /></svg></div>" +
+            "<div class=\"device-wave-row pleth\"><span>SpO2 PLETH</span><svg viewBox=\"0 0 520 72\" role=\"img\" aria-label=\"SpO2 pleth waveform\"><polyline points=\"" + plethPoints + "\" /></svg></div>" +
             "<div class=\"device-wave-row resp\"><span>RESP</span><svg viewBox=\"0 0 520 64\" role=\"img\" aria-label=\"respiratory waveform\"><polyline points=\"0,42 28,40 58,35 88,27 118,22 148,25 178,34 208,42 238,44 268,41 298,35 328,27 358,22 388,25 418,34 448,42 478,44 520,41\" /></svg></div>" +
           "</section>" +
           "<dl class=\"device-vital-bank\" aria-label=\"monitor vital signs\">" +
@@ -4240,8 +5144,18 @@ function submitSbar() {
     applyPatientImpact({ anxiety: 3 });
   }
   closeContextWindow();
-  const outcome = sbarOutcomeForTrajectory(getClinicalTrajectory());
-  setPatientOutcome(outcome.type, outcome.reason, outcome.details);
+  addLog("차지 간호사: SBAR 확인했습니다. 제가 담당의에게 노티할게요. 그동안 환자 곁에서 pain, BP, SpO₂와 ECG 변화를 계속 봐주세요.", "good");
+  state.chargeFollowUp = {
+    active: true,
+    pain: false,
+    vitals: false,
+    monitor: false,
+    oxygen: state.oxygenApplied,
+    updateCharge: false,
+    waited: 0,
+  };
+  state.stage = "postSbarBedside";
+  render();
 }
 
 function chooseProcedureStep(step) {
@@ -4473,6 +5387,27 @@ function renderVitals() {
 }
 
 function currentVitals() {
+  if (isWardWorkflowEpisode()) {
+    const ward = state.wardWorkflow || createWardWorkflowState();
+    const oxygenSupport = ward.oxygenApplied ? 4 : 0;
+    const monitoringRelief = ward.monitorAttached ? 1.5 : 0;
+    const ivRelief = ward.ivChecked ? 5 : 0;
+    const unattendedPenalty = ward.bedsidePresence ? 0 : 8;
+    const shockLoad = ward.shockRisk + unattendedPenalty;
+    const spo2 = clamp(Math.round(ward.oxygenation + oxygenSupport - shockLoad / 18), 84, 99);
+    const hr = clamp(Math.round(94 + shockLoad * 0.72 - monitoringRelief), 72, 148);
+    const rr = clamp(Math.round(18 + Math.max(0, 94 - spo2) * 0.8 + shockLoad / 18), 12, 34);
+    const systolic = clamp(Math.round(112 - shockLoad * 0.62 + ivRelief), 72, 128);
+    const diastolic = clamp(Math.round(66 - shockLoad * 0.28 + ivRelief * 0.35), 42, 82);
+
+    return {
+      hr,
+      spo2,
+      rr,
+      bp: String(systolic) + "/" + String(diastolic),
+    };
+  }
+
   const status = state.patientStatus;
   const oxygenMinutes = typeof minutesSinceFollowUp === "function" ? minutesSinceFollowUp("oxygen") : null;
   const nitroMinutes = typeof minutesSinceFollowUp === "function" ? minutesSinceFollowUp("nitro") : null;
@@ -4590,6 +5525,26 @@ function createClinicalActionPrompt(scene) {
       title: "재사정 후 보고하세요",
       text: "환자와 모니터를 반복 확인해 PRN 후 pain, vital signs, ECG waveform과 지연 반응을 관찰한 뒤 SBAR를 시작하세요.",
     },
+    wardIntro: {
+      title: "액팅 간호사 역할",
+      text: "인계의 subtle warning을 바탕으로 환자 곁에서 baseline을 잡고 차지에게 보고할 근거를 모으세요.",
+    },
+    wardBaseline: {
+      title: "baseline을 숫자로 고정하세요",
+      text: "repeat BP, SpO₂, 의식, 피부, 소변량 감소를 묶어 추세로 판단해야 합니다.",
+    },
+    wardDeterioration: {
+      title: "차지를 부르되 곁을 지키세요",
+      text: "차지 호출은 시작입니다. 산소, 모니터, IV, repeat BP를 이어가야 합니다.",
+    },
+    wardChargeNotify: {
+      title: "노티 중 acting task",
+      text: "차지가 의사에게 전화하는 동안 repeat BP, SpO₂, IV, mental change를 계속 업데이트하세요.",
+    },
+    postSbarBedside: {
+      title: "보고 후에도 끝이 아닙니다",
+      text: "차지가 담당의에게 노티하는 동안 환자 곁에서 repeat BP, pain, SpO₂, ECG 변화를 계속 업데이트하세요.",
+    },
   };
 
   const prompt = prompts[state.stage];
@@ -4599,6 +5554,46 @@ function createClinicalActionPrompt(scene) {
   card.className = "clinical-action-prompt";
   card.innerHTML = "<strong>" + prompt.title + "</strong><span>" + prompt.text + "</span>";
   return card;
+}
+
+function createWardBedsideHelp() {
+  const ward = state.wardWorkflow || createWardWorkflowState();
+  const actions = wardWorkflowReadyActions();
+  const vitals = currentVitals();
+  const helper = document.createElement("div");
+  helper.className = "ward-help-card";
+
+  const stageGuide = {
+    wardIntro: "처음에는 모니터 수치와 환자 반응을 같이 보면서 baseline을 잡으세요.",
+    wardBaseline: "repeat BP와 SpO₂를 다시 확인하고, 처진 반응이 실제 변화인지 비교하세요.",
+    wardDeterioration: "차지를 부르기 전후로 산소, 모니터, IV, 의식 변화를 끊지 말고 이어가세요.",
+    wardChargeNotify: "차지가 의사에게 전화 중입니다. 기다리지 말고 bedside task를 계속 수행하세요.",
+  };
+  const nextHint = state.stage === "wardChargeNotify"
+    ? "차지 NPC 또는 전화기를 클릭해 최신 상태를 업데이트하고, 모니터/환자/IV를 반복 확인하세요."
+    : "환자, 침상 모니터, IV 라인, 전화기를 클릭해 근거를 모은 뒤 차지를 호출하세요.";
+
+  const checklist = [
+    ["모니터/파형", actions.monitor, "침상 모니터 클릭"],
+    ["repeat BP", actions.repeatBp, "침상 모니터 클릭"],
+    ["산소/SpO₂", actions.oxygen, "O2 마스크 도구 또는 환자 클릭"],
+    ["IV 확인", actions.iv, "환자 팔 IV 라인 클릭"],
+    ["의식/순환", actions.mental, "환자 클릭"],
+    ["차지 보고", actions.charge, "전화기/차지 클릭"],
+    ["최신 업데이트", actions.updateCharge, "차지 NPC 클릭"],
+  ];
+
+  helper.innerHTML =
+    "<strong>Bedside 도움말</strong>" +
+    "<p>" + (stageGuide[state.stage] || "3D 병실 오브젝트를 클릭해 bedside 행동을 수행하세요.") + "</p>" +
+    "<div class=\"ward-help-vitals\"><span>HR " + vitals.hr + "</span><span>SpO₂ " + vitals.spo2 + "%</span><span>BP " + vitals.bp + "</span></div>" +
+    "<ul>" +
+      checklist.map(([label, done, hint]) =>
+        "<li class=\"" + (done ? "done" : "pending") + "\"><span>" + (done ? "완료" : "다음") + "</span><strong>" + label + "</strong><small>" + hint + "</small></li>"
+      ).join("") +
+    "</ul>" +
+    "<p class=\"ward-help-next\">" + nextHint + "</p>";
+  return helper;
 }
 
 function renderActions(scene) {
@@ -4660,13 +5655,21 @@ function renderActions(scene) {
 
   if (scene.sbar) {
     if (!state.contextWindowType) renderSbarContextWindow();
-    appendContextPrompt("SBAR 보고", "보고 구성은 임시 communication window에서 진행합니다.", "SBAR 창 열기", renderSbarContextWindow);
+    appendContextPrompt("차지 간호사 SBAR", "차지에게 보고하면 차지가 담당의 노티를 진행합니다. 플레이어는 bedside 재사정을 계속해야 합니다.", "차지 SBAR 창 열기", renderSbarContextWindow);
     return;
   }
 
   const clinicalPrompt = createClinicalActionPrompt(scene);
   if (clinicalPrompt) {
     actionsEl.append(clinicalPrompt);
+    if (isWardWorkflowEpisode()) {
+      const guide = document.createElement("div");
+      guide.className = "clinical-action-prompt compact ward-bedside-guide";
+      guide.innerHTML = "<strong>3D 병실에서 직접 수행하세요.</strong><span>환자, 침상 모니터, IV 라인, 차지 간호사/전화기를 클릭해 액팅 간호사 행동을 이어갑니다. 오른쪽은 진행 요약만 보여줍니다.</span>";
+      actionsEl.append(guide);
+      actionsEl.append(createWardBedsideHelp());
+      return;
+    }
     return;
   }
 
@@ -5033,15 +6036,26 @@ function createOutcomeSummary() {
   if (!state.outcome) return "";
 
   const outcome = state.outcome;
-  const actionLabels = {
-    history: "흉통 문진",
-    vitals: "활력징후",
-    ecg: "ECG 모니터링",
-    orders: "정규 처방",
-    intervention: "중재",
-    reassessment: "재사정",
-    sbar: "SBAR",
-  };
+  const actionLabels = isWardWorkflowEpisode()
+    ? {
+        charge: "차지 호출",
+        repeatBp: "repeat BP",
+        oxygen: "산소/SpO₂",
+        monitor: "모니터 확인",
+        iv: "IV 확인",
+        mental: "의식 재사정",
+        updateCharge: "차지 업데이트",
+        bedside: "bedside 유지",
+      }
+    : {
+        history: "흉통 문진",
+        vitals: "활력징후",
+        ecg: "ECG 모니터링",
+        orders: "정규 처방",
+        intervention: "중재",
+        reassessment: "재사정",
+        sbar: "SBAR",
+      };
   const actionItems = Object.entries(actionLabels)
     .map(([key, label]) => {
       const done = Boolean(outcome.actions?.[key]);
@@ -5064,7 +6078,7 @@ function createOutcomeSummary() {
   "</section>";
 }
 function renderEvaluation() {
-  const isEnd = state.stage === "goodEnd" || state.stage === "badEnd";
+  const isEnd = state.stage === "goodEnd" || state.stage === "badEnd" || state.stage === "wardGoodEnd" || state.stage === "wardBadEnd";
   evaluationEl.hidden = !isEnd;
   if (!isEnd) {
     evaluationBodyEl.innerHTML = "";
@@ -5081,6 +6095,34 @@ function renderEvaluation() {
   const missedHistory = requiredHistoryQuestions().filter(
     (question) => !state.askedQuestions.includes(question.id),
   );
+  if (isWardWorkflowEpisode()) {
+    const wardActions = state.outcome?.actions || wardWorkflowReadyActions();
+    const wardItems = [
+      ["차지 호출", wardActions.charge],
+      ["repeat BP", wardActions.repeatBp],
+      ["산소/SpO₂ 확인", wardActions.oxygen],
+      ["모니터 확인", wardActions.monitor],
+      ["IV 확인", wardActions.iv],
+      ["의식/순환 재사정", wardActions.mental],
+      ["차지 업데이트", wardActions.updateCharge],
+      ["bedside 유지", wardActions.bedside],
+    ];
+    const note = state.outcome?.type === "stabilized"
+      ? "차지 노티 중에도 액팅 간호사가 bedside에서 수행할 수 있는 행동을 이어갔습니다."
+      : "보고 자체보다 보고 중 bedside 공백이 악화에 영향을 줬습니다.";
+
+    evaluationBodyEl.innerHTML = `
+      ${createOutcomeSummary()}
+      <ul class="evaluation-list">
+        ${scoreLabels.map(([label, score]) => `<li><span>${label}</span><strong>${score}</strong></li>`).join("")}
+      </ul>
+      <ul class="evaluation-list">
+        ${wardItems.map(([label, done]) => `<li><span>${label}</span><strong>${done ? "수행" : "누락"}</strong></li>`).join("")}
+      </ul>
+      <p class="evaluation-note">${note}</p>
+    `;
+    return;
+  }
   const note = state.outcome
     ? (state.outcome.type === "stabilized"
         ? "환자 상태와 핵심 임상 행동을 기준으로 안정화 결과가 확정되었습니다."
@@ -5171,6 +6213,8 @@ titleEpisodeSelectEl?.addEventListener("click", openEpisodeLobby);
 titleOptionsEl?.addEventListener("click", toggleTitleOptions);
 episodeBackHomeEl?.addEventListener("click", returnToTitleScreen);
 episodeStartEl?.addEventListener("click", () => startEpisode("acsChestPain"));
+episodeStartAcsEl?.addEventListener("click", () => startEpisode("acsChestPain"));
+episodeStartWardEl?.addEventListener("click", () => startEpisode("wardWorkflow"));
 simulationHomeEl?.addEventListener("click", returnToTitleScreen);
 
 resetGame();
