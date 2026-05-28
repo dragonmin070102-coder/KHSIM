@@ -1011,7 +1011,6 @@
         let currentPain = 0;
         let latestVitals = null;
         let latestPatientState = null;
-        let headUpSmoothed = 0.0; // smoothed lerp target for GBS head-of-bed elevation
         let latestUrgency = { level: "mild", score: 0 };
         let is3DMonitorActive = false;
         let latestCueProfile = {
@@ -2564,7 +2563,7 @@
           patientModelRoot.position.z = patientSupineBase.position.z + Math.sin(time * 0.46) * cues.restlessness * 0.006;
           patientModelRoot.rotation.x = patientSupineBase.rotation.x;
           patientModelRoot.rotation.y = patientSupineBase.rotation.y + Math.sin(time * 0.33) * cues.restlessness * 0.012;
-          patientModelRoot.rotation.z = patientSupineBase.rotation.z + restlessnessMotion * 0.05 + shoulderTension * 0.08 + headUpSmoothed;
+          patientModelRoot.rotation.z = patientSupineBase.rotation.z + restlessnessMotion * 0.05 + shoulderTension * 0.08;
           patientModelRoot.scale.set(
             patientBaseScale * (1 + chestExpansion * 0.025),
             patientBaseScale * (1 + chestExpansion * 0.075),
@@ -2574,9 +2573,6 @@
           patientGownGroup.position.y = breathingMotion * 0.22 - responsivenessSlump * 0.45 + calmSettling;
           patientGownGroup.position.z = Math.sin(time * 0.46) * cues.restlessness * 0.01;
           patientGownGroup.scale.setScalar(1 + chestExpansion * 0.018);
-          // head-of-bed elevation (GBS aspiration precaution) — smooth lerp
-          const headUpTarget3D = Boolean(latestPatientState?.gbsWorkflow?.headOfBedRaised) ? 0.52 : 0.0;
-          headUpSmoothed += (headUpTarget3D - headUpSmoothed) * 0.038;
 
           if (patientBones.Spine2?.userData.restRotation) {
             patientBones.Spine2.rotation.copy(patientBones.Spine2.userData.restRotation);
@@ -2595,9 +2591,9 @@
             patientBones.Head.rotation.x += breathingMotion * 0.28;
           }
           patientHeadAnchor.position.set(
-            patientHeadAnchorBase.x + restlessnessMotion * 0.55 - headUpSmoothed * 0.08,
-            patientHeadAnchorBase.y + breathingMotion * 0.7 - responsivenessSlump + headUpSmoothed * 0.54,
-            patientHeadAnchorBase.z - headUpSmoothed * 0.08,
+            patientHeadAnchorBase.x + restlessnessMotion * 0.55,
+            patientHeadAnchorBase.y + breathingMotion * 0.7 - responsivenessSlump,
+            patientHeadAnchorBase.z,
           );
           patientHairCap.position.x = patientHeadAnchor.position.x - 0.01;
           patientHairCap.position.y = patientHeadAnchor.position.y + 0.03;
@@ -2608,7 +2604,7 @@
           oxygenMask.position.z = patientHeadAnchor.position.z;
           oxygenMask.rotation.z = -0.12 + patientModelRoot.rotation.z * 0.08;
           ecgPads.forEach((pad, index) => {
-            pad.position.y = [1.57, 1.57, 1.52][index] + breathingMotion * (0.38 + index * 0.05) + headUpSmoothed * 0.22;
+            pad.position.y = [1.57, 1.57, 1.52][index] + breathingMotion * (0.38 + index * 0.05);
             pad.rotation.z = restlessnessMotion * 0.22;
           });
           ivBag.position.y = 2.42 + Math.sin(time * 0.18) * 0.006;
