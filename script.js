@@ -102,6 +102,8 @@ const state = {
     position: null,
   },
   wardWorkflow: null,
+  gbsWorkflow: null,
+  gbsAssessmentRecords: [],
   chargeFollowUp: null,
 };
 
@@ -119,6 +121,14 @@ const wardWorkflowHandoff = [
   { label: "현재 상태", text: "열은 뚜렷하지 않지만 맥박이 조금 빠르고 얼굴빛이 좋지 않습니다." },
   { label: "역할", text: "당신은 액팅 간호사입니다. 이상징후를 발견하면 차지에게 보고하고 bedside 행동을 지속해야 합니다." },
   { label: "주의", text: "차지가 의사 노티를 하는 동안에도 repeat BP, 산소, 모니터, IV 확인을 멈추면 안 됩니다." },
+];
+
+const gbsHandoff = [
+  { label: "703호", text: "상행성 weakness로 GBS 의심되어 입원한 환자입니다. 다리 힘 빠짐이 어제보다 올라오는 느낌이라고 합니다." },
+  { label: "호흡", text: "SpO₂는 아직 크게 나쁘지 않지만 말이 짧아지고 기침 힘이 약해졌다는 보호자 말이 있습니다." },
+  { label: "연하", text: "물 마실 때 사레가 들릴 뻔했고 침 삼키기가 조금 어렵다고 말했습니다." },
+  { label: "자율신경", text: "BP와 HR이 들쭉날쭉합니다. GBS dysautonomia 가능성을 염두에 두고 ECG와 BP를 계속 보세요." },
+  { label: "핵심", text: "GBS는 SpO₂만 정상이어도 안전하지 않습니다. VC, EtCO₂, ABGA, cough/swallow, reflex 변화를 함께 봐야 합니다." },
 ];
 
 const patient = {
@@ -152,6 +162,35 @@ const patient = {
   ],
 };
 
+function currentPatientProfile() {
+  if (state.currentEpisode === "gbsRespiratory") {
+    return {
+      name: "Park Sung-min",
+      age: 46,
+      diagnosis: "GBS 의심 · ascending weakness",
+      chiefComplaint: "다리 힘 빠짐, 손발 저림, 말 짧아짐",
+      plannedSurgery: "수술 계획 없음 · respiratory/ICU escalation 감시",
+      pod: "신경계 병동 703호 · 입원 초기",
+      weightKg: 72,
+      labs: [
+        { name: "ABGA", value: "pending", unit: "", flag: "Watch", normal: "PaCO₂ 35-45" },
+        { name: "VC", value: Math.round(state.gbsWorkflow?.vc || 28), unit: "mL/kg", flag: "Trend", normal: "> 20 mL/kg" },
+        { name: "EtCO₂", value: Math.round(state.gbsWorkflow?.etco2 || 36), unit: "mmHg", flag: "Watch", normal: "35-45" },
+      ],
+      regularOrders: [
+        { id: "gbs-monitor", label: "Continuous ECG/NIBP/SpO₂ monitoring" },
+        { id: "gbs-vc", label: "Vital capacity q1h and PRN deterioration" },
+        { id: "gbs-npo", label: "NPO if dysphagia/aspiration risk" },
+      ],
+      prnOrders: [
+        { id: "gbs-o2", label: "O₂ apply PRN desaturation or respiratory distress", indication: "호흡곤란/SpO₂ 저하" },
+        { id: "gbs-suction", label: "Suction PRN secretion/weak cough", indication: "drooling, weak cough" },
+      ],
+    };
+  }
+  return patient;
+}
+
 const episodes = {
   acsChestPain: {
     id: "acsChestPain",
@@ -167,6 +206,14 @@ const episodes = {
     patientName: "601호 환자",
     patientSummary: "병동 신규 간호사 역할 · subtle deterioration · 차지 협업",
     difficulty: "중급",
+    status: "available",
+  },
+  gbsRespiratory: {
+    id: "gbsRespiratory",
+    title: "GBS 호흡근 악화 감지",
+    patientName: "박성민",
+    patientSummary: "46세 남성 · GBS 의심 · 상행성 weakness와 호흡근 위험",
+    difficulty: "중급-상급",
     status: "available",
   },
   cardiacArrest: {
@@ -1236,6 +1283,48 @@ const scenes = {
       },
     ],
   },
+  gbsIntro: {
+    title: "703호 GBS 의심 환자",
+    text:
+      "환자는 다리 힘이 빠지고 손발 저림이 올라오는 느낌을 말합니다. SpO₂는 아직 괜찮아 보여도 GBS에서는 VC, EtCO₂, cough/swallow, reflex, BP/HR fluctuation을 함께 봐야 합니다.",
+    actions: [],
+  },
+  gbsDeterioration: {
+    title: "호흡근 악화 전조",
+    text:
+      "환자의 말이 짧아지고 기침 힘이 약합니다. SpO₂만 보면 안심하기 쉽지만 VC와 EtCO₂는 이미 나빠지는 흐름입니다.",
+    actions: [],
+  },
+  gbsEscalationNotify: {
+    title: "차지/ICU 노티 중",
+    text:
+      "차지가 의사와 ICU escalation을 진행 중입니다. 그동안 bedside에서 VC, EtCO₂, cough/swallow, aspiration risk, ECG/BP fluctuation을 계속 업데이트해야 합니다.",
+    actions: [],
+  },
+  gbsGoodEnd: {
+    title: "GBS respiratory escalation 평가",
+    text:
+      "SpO₂만 보지 않고 respiratory muscle failure 전조와 bulbar/autonomic 위험을 조기에 묶어 ICU escalation이 진행되었습니다.",
+    actions: [
+      {
+        label: "다시 시도",
+        next: "gbsIntro",
+        reset: true,
+      },
+    ],
+  },
+  gbsBadEnd: {
+    title: "GBS respiratory escalation 평가",
+    text:
+      "GBS 환자에서 호흡근 악화와 aspiration/dysautonomia warning이 늦게 인지되었습니다. SpO₂ 정상만으로 안심하면 안 됩니다.",
+    actions: [
+      {
+        label: "다시 시도",
+        next: "gbsIntro",
+        reset: true,
+      },
+    ],
+  },
   goodEnd: {
     title: "근무 평가",
     text:
@@ -1269,6 +1358,8 @@ const empathyScoreEl = document.querySelector("#empathy-score");
 const protocolScoreEl = document.querySelector("#protocol-score");
 const sceneTitleEl = document.querySelector("#scene-title");
 const sceneTextEl = document.querySelector("#scene-text");
+const scenarioLabelEl = document.querySelector("#scenario-label");
+const emrTitleEl = document.querySelector("#emr-title");
 const actionsEl = document.querySelector("#actions");
 const interactionMenuEl = document.querySelector("#interaction-menu");
 const patientConversationEl = document.querySelector("#patient-conversation");
@@ -1323,6 +1414,7 @@ const episodeLobbyEl = document.querySelector("#episode-lobby");
 const episodeStartEl = document.querySelector("#episode-start");
 const episodeStartAcsEl = document.querySelector("#episode-start-acs");
 const episodeStartWardEl = document.querySelector("#episode-start-ward");
+const episodeStartGbsEl = document.querySelector("#episode-start-gbs");
 const episodeBackHomeEl = document.querySelector("#episode-back-home");
 const simulationHomeEl = document.querySelector("#simulation-home");
 let contextWindowDrag = null;
@@ -1630,7 +1722,7 @@ function renderHandoffOverlay() {
 
   if (!isVisible) return;
 
-  const handoffItems = isWardWorkflowEpisode() ? wardWorkflowHandoff : clinicalHandoff;
+  const handoffItems = isGbsEpisode() ? gbsHandoff : isWardWorkflowEpisode() ? wardWorkflowHandoff : clinicalHandoff;
   handoffContentEl.innerHTML = "<ul>" + handoffItems.map((item) =>
     "<li><span>" + item.label + "</span><strong>" + item.text + "</strong></li>"
   ).join("") + "</ul>";
@@ -1643,6 +1735,13 @@ function continueFromHandoff() {
     state.clinicalEntry.bedsideReleased = true;
     state.stage = "wardIntro";
     addLog("인계 완료: 601호 subtle warning을 확인하고 병실로 이동합니다.", "good");
+    render();
+    return;
+  }
+  if (isGbsEpisode()) {
+    state.clinicalEntry.bedsideReleased = true;
+    state.stage = "gbsIntro";
+    addLog("인계 완료: GBS 환자의 호흡근 위험과 연하/자율신경 warning을 확인하고 병실로 이동합니다.", "good");
     render();
     return;
   }
@@ -1722,25 +1821,26 @@ function addLog(text, tone = "") {
 
 function renderClinicalData() {
   if (!patientDetailsEl || !labListEl || !regularOrderListEl || !prnOrderListEl) return;
+  const profile = currentPatientProfile();
 
   patientDetailsEl.innerHTML = `
-    <dt>Name</dt><dd>${patient.name}</dd>
-    <dt>Age</dt><dd>${patient.age}</dd>
-    <dt>Diagnosis</dt><dd>${patient.diagnosis}</dd>
-    <dt>CC</dt><dd>${patient.chiefComplaint}</dd>
-    <dt>수술 계획</dt><dd>${patient.plannedSurgery}</dd>
-    <dt>POD</dt><dd>${patient.pod}</dd>
+    <dt>Name</dt><dd>${profile.name}</dd>
+    <dt>Age</dt><dd>${profile.age}</dd>
+    <dt>Diagnosis</dt><dd>${profile.diagnosis}</dd>
+    <dt>CC</dt><dd>${profile.chiefComplaint}</dd>
+    <dt>계획</dt><dd>${profile.plannedSurgery}</dd>
+    <dt>상태</dt><dd>${profile.pod}</dd>
   `;
 
-  labListEl.innerHTML = patient.labs
+  labListEl.innerHTML = profile.labs
     .map((lab) => `<li><strong>${lab.name}</strong> ${lab.value} ${lab.unit} <span>${lab.flag} · 정상범위 ${lab.normal}</span></li>`)
     .join("");
 
-  regularOrderListEl.innerHTML = patient.regularOrders
+  regularOrderListEl.innerHTML = profile.regularOrders
     .map((order) => `<li class="${state.appliedRegularOrders.includes(order.id) ? "done" : ""}">${order.label}</li>`)
     .join("");
 
-  prnOrderListEl.innerHTML = patient.prnOrders
+  prnOrderListEl.innerHTML = profile.prnOrders
     .map((order) => `<li class="${state.prnMedicationsGiven.includes(order.id) ? "done" : ""}">${order.label}</li>`)
     .join("");
 }
@@ -1848,6 +1948,8 @@ function resetGame() {
     position: null,
   };
   state.wardWorkflow = null;
+  state.gbsWorkflow = null;
+  state.gbsAssessmentRecords = [];
   state.chargeFollowUp = null;
   closeContextWindow();
   addLog("야간 근무 인계가 시작되었습니다. 환자 상태와 처방을 확인한 뒤 침상으로 들어갑니다.");
@@ -1886,6 +1988,40 @@ function setupWardWorkflowEpisode() {
   addLog("Ward Workflow 시작: 601호 bedside monitor가 이미 연결되어 있습니다. 파형과 환자 상태를 근거로 차지에게 보고하세요.", "good");
 }
 
+function setupGbsEpisode() {
+  state.currentEpisode = "gbsRespiratory";
+  state.stage = "handoff";
+  state.clinicalEntry = {
+    handoffComplete: false,
+    chartExposed: false,
+    bedsideReleased: false,
+  };
+  state.monitorOn = true;
+  state.ekgAttached = true;
+  state.oxygenApplied = false;
+  state.patientStatus = {
+    pain: 1,
+    anxiety: 58,
+    breathing: 64,
+    cooperation: 66,
+  };
+  state.knownPatientInfo = {
+    pain: true,
+    breathing: true,
+    cardiacRisk: false,
+  };
+  state.gbsWorkflow = createGbsWorkflowState();
+  state.gbsAssessmentRecords = [];
+  state.wardWorkflow = null;
+  state.chargeFollowUp = null;
+  state.logs = [];
+  state.eventHistory = [];
+  state.outcome = null;
+  state.elapsedMinutes = 0;
+  state.wardObjectScoreMarks = {};
+  addLog("GBS 에피소드 시작: SpO₂만 보지 말고 호흡근, cough/swallow, VC, EtCO₂와 자율신경 변화를 추적하세요.", "good");
+}
+
 function openEpisodeLobby() {
   titleScreenEl.hidden = true;
   episodeLobbyEl.hidden = false;
@@ -1922,6 +2058,7 @@ function startEpisode(episodeId = "acsChestPain") {
 
   resetGame();
   if (episodeId === "wardWorkflow") setupWardWorkflowEpisode();
+  if (episodeId === "gbsRespiratory") setupGbsEpisode();
   titleScreenEl.hidden = true;
   episodeLobbyEl.hidden = true;
   document.body.classList.remove("title-active");
@@ -2064,6 +2201,9 @@ function syncCompletedAssessments() {
     "wardBaseline",
     "wardDeterioration",
     "wardChargeNotify",
+    "gbsIntro",
+    "gbsDeterioration",
+    "gbsEscalationNotify",
     "goodEnd",
   ];
 
@@ -2108,6 +2248,71 @@ function createWardWorkflowState() {
 
 function isWardWorkflowEpisode() {
   return state.currentEpisode === "wardWorkflow";
+}
+
+function createGbsWorkflowState() {
+  return {
+    respiratoryStrength: 82,
+    bulbarFunction: 78,
+    autonomicStability: 78,
+    weaknessLevel: 36,
+    reflexLoss: 38,
+    vc: 28,
+    etco2: 36,
+    abgaChecked: false,
+    vcChecked: false,
+    coughSwallowChecked: false,
+    reflexChecked: false,
+    motorChecked: false,
+    monitorReviewed: false,
+    aspirationPrecaution: false,
+    suctionReady: false,
+    oxygenApplied: false,
+    headOfBedRaised: false,
+    chargeCalled: false,
+    chargeAtBedside: false,
+    icuEscalated: false,
+    updatedCharge: false,
+    waitedTicks: 0,
+    leftBedsideTicks: 0,
+    notificationTicks: 0,
+    bedsidePresence: true,
+  };
+}
+
+function isGbsEpisode() {
+  return state.currentEpisode === "gbsRespiratory";
+}
+
+function recordGbsAssessment(type, label, value, interpretation = "") {
+  if (!state.gbsAssessmentRecords) state.gbsAssessmentRecords = [];
+  state.gbsAssessmentRecords.unshift({
+    minute: state.elapsedMinutes,
+    type,
+    label,
+    value,
+    interpretation,
+  });
+  state.gbsAssessmentRecords = state.gbsAssessmentRecords.slice(0, 12);
+  if (state.emrOpened && state.emrTab === "notes") renderEmr();
+}
+
+function gbsReadyActions() {
+  const gbs = state.gbsWorkflow || {};
+  return {
+    motor: Boolean(gbs.motorChecked),
+    reflex: Boolean(gbs.reflexChecked),
+    coughSwallow: Boolean(gbs.coughSwallowChecked),
+    vc: Boolean(gbs.vcChecked),
+    etco2: Boolean(gbs.monitorReviewed),
+    abga: Boolean(gbs.abgaChecked),
+    aspiration: Boolean(gbs.aspirationPrecaution),
+    suction: Boolean(gbs.suctionReady),
+    oxygen: Boolean(gbs.oxygenApplied || state.oxygenApplied),
+    charge: Boolean(gbs.chargeCalled),
+    updateCharge: Boolean(gbs.updatedCharge),
+    bedside: gbs.bedsidePresence && gbs.leftBedsideTicks === 0,
+  };
 }
 
 function wardWorkflowReadyActions() {
@@ -2332,6 +2537,12 @@ function chargeFollowUpAction(action) {
 
 function choose(action) {
   if (action.reset) {
+    if (isGbsEpisode()) {
+      setupGbsEpisode();
+      state.stage = "gbsIntro";
+      render();
+      return;
+    }
     if (isWardWorkflowEpisode()) {
       setupWardWorkflowEpisode();
       state.stage = "wardIntro";
@@ -2618,8 +2829,8 @@ const bedsideTools = {
   },
   oxygenMask: {
     label: "O2 마스크",
-    validTargets: ["patient"],
-    hint: "환자 얼굴에 적용해 산소화를 돕습니다.",
+    validTargets: ["patient", "wallOxygen"],
+    hint: "환자 얼굴 또는 벽 산소 아웃렛에 적용해 산소화를 돕습니다.",
   },
   syringe: {
     label: "주사기",
@@ -2684,6 +2895,12 @@ function usePulseOxOnPatient() {
 function useOxygenMaskOnPatient() {
   if (isWardWorkflowEpisode() && state.wardWorkflow) {
     performWardObjectAction("wardOxygen");
+    clearActiveTool();
+    return;
+  }
+  if (isGbsEpisode() && state.gbsWorkflow) {
+    gbsAction("oxygen");
+    applyScore({ safety: 2, clinical: 1 });
     clearActiveTool();
     return;
   }
@@ -3009,7 +3226,7 @@ function handleToolTarget(toolId, target) {
 
   if (toolId === "stethoscope") useStethoscopeOnPatient();
   if (toolId === "pulseOx") usePulseOxOnPatient();
-  if (toolId === "oxygenMask") useOxygenMaskOnPatient();
+  if (toolId === "oxygenMask" && (target === "patient" || target === "wallOxygen")) useOxygenMaskOnPatient();
   if (toolId === "syringe" && target === "medication") useSyringeOnMedicationCart();
   if (toolId === "syringe" && target === "patient") administerPreparedMedicationAtBedside();
 
@@ -3027,7 +3244,11 @@ function handleClinicalTargetClick(target) {
     return true;
   }
 
-  if (isWardWorkflowEpisode() && ["patient", "monitor", "iv", "charge", "communication"].includes(target)) {
+  if (isGbsEpisode() && ["patient", "monitor", "iv", "charge", "communication", "wallOxygen", "wallSuction"].includes(target)) {
+    return false;
+  }
+
+  if (isWardWorkflowEpisode() && ["patient", "monitor", "iv", "charge", "communication", "wallOxygen"].includes(target)) {
     return false;
   }
 
@@ -3168,13 +3389,83 @@ const wardClinicalInteractionMenus = {
     ],
   },
   iv: clinicalInteractionMenus.iv,
+  wallOxygen: {
+    title: "Wall O₂",
+    role: "벽 산소 flowmeter와 라인을 확인하고 SpO₂ 반응을 봅니다.",
+    actions: [
+      { id: "wardOxygen", label: "벽 산소 연결 후 산소 적용" },
+    ],
+  },
   charge: clinicalInteractionMenus.charge,
   communication: clinicalInteractionMenus.communication,
   emr: clinicalInteractionMenus.emr,
   chart: clinicalInteractionMenus.chart,
 };
 
+const gbsClinicalInteractionMenus = {
+  patient: {
+    title: "GBS 환자 bedside 사정",
+    role: "상행성 weakness, reflex 감소, cough/swallow, shallow breathing을 직접 확인합니다.",
+    actions: [
+      { id: "gbsMotor", label: "상하지 motor strength와 weakness progression 확인" },
+      { id: "gbsReflex", label: "DTR/reflex 감소 확인" },
+      { id: "gbsCoughSwallow", label: "weak cough, drooling, dysphagia 확인" },
+      { id: "gbsAspiration", label: "aspiration precaution 적용" },
+    ],
+  },
+  monitor: {
+    title: "GBS 호흡/자율신경 모니터",
+    role: "SpO₂ 정상 여부보다 VC, EtCO₂, ABGA, ECG/BP fluctuation을 묶어 판단합니다.",
+    actions: [
+      { id: "gbsVc", label: "vital capacity 측정" },
+      { id: "gbsMonitor", label: "EtCO₂, ECG, BP fluctuation 관찰" },
+      { id: "gbsAbga", label: "ABGA 확인 준비" },
+      { id: "expandEcg", label: "모니터 화면 확대 관찰 (VC/EtCO₂ 포함)" },
+    ],
+  },
+  iv: {
+    title: "Airway 준비",
+    role: "GBS bulbar weakness에서는 aspiration 예방과 suction 준비가 중요합니다.",
+    actions: [
+      { id: "gbsSuction", label: "suction 준비와 airway cart 확인" },
+    ],
+  },
+  wallOxygen: {
+    title: "Wall O₂",
+    role: "벽 산소 flowmeter와 라인을 확인하고 필요한 산소를 적용합니다.",
+    actions: [
+      { id: "gbsWallOxygen", label: "벽 산소 flowmeter 연결 후 O₂ 적용" },
+    ],
+  },
+  wallSuction: {
+    title: "Wall suction",
+    role: "흡인 압력, canister, suction catheter를 bedside에 준비합니다.",
+    actions: [
+      { id: "gbsSuction", label: "wall suction 압력과 canister 준비" },
+    ],
+  },
+  charge: {
+    title: "차지 간호사",
+    role: "GBS respiratory failure 전조를 묶어 ICU escalation을 보고합니다.",
+    actions: [
+      { id: "gbsCallCharge", label: "GBS 호흡근 악화 근거로 차지 호출" },
+      { id: "gbsUpdateCharge", label: "최신 VC/EtCO₂/cough-swallow 상태 업데이트" },
+    ],
+  },
+  communication: {
+    title: "연락 장비",
+    role: "차지에게 보고하고 ICU/담당의 escalation을 시작합니다.",
+    actions: [
+      { id: "gbsCallCharge", label: "차지 호출" },
+      { id: "gbsUpdateCharge", label: "최신 상태 업데이트" },
+    ],
+  },
+  emr: clinicalInteractionMenus.emr,
+  chart: clinicalInteractionMenus.chart,
+};
+
 function clinicalMenuForTarget(target) {
+  if (isGbsEpisode() && gbsClinicalInteractionMenus[target]) return gbsClinicalInteractionMenus[target];
   if (isWardWorkflowEpisode() && wardClinicalInteractionMenus[target]) return wardClinicalInteractionMenus[target];
   return clinicalInteractionMenus[target];
 }
@@ -3191,6 +3482,89 @@ function wardInteractionStatus(actionId) {
     wardUpdateCharge: Boolean(ward.updatedCharge),
   };
   return Boolean(status[actionId]);
+}
+
+function gbsInteractionStatus(actionId) {
+  const gbs = state.gbsWorkflow || {};
+  const status = {
+    gbsMotor: Boolean(gbs.motorChecked),
+    gbsReflex: Boolean(gbs.reflexChecked),
+    gbsCoughSwallow: Boolean(gbs.coughSwallowChecked),
+    gbsAspiration: Boolean(gbs.aspirationPrecaution),
+    gbsVc: Boolean(gbs.vcChecked),
+    gbsMonitor: Boolean(gbs.monitorReviewed),
+    gbsAbga: Boolean(gbs.abgaChecked),
+    gbsSuction: Boolean(gbs.suctionReady),
+    gbsWallOxygen: Boolean(gbs.oxygenApplied),
+    gbsCallCharge: Boolean(gbs.chargeCalled),
+    gbsUpdateCharge: Boolean(gbs.updatedCharge),
+  };
+  return Boolean(status[actionId]);
+}
+
+function performGbsObjectAction(actionId) {
+  const actionById = {
+    gbsMotor: "motor",
+    gbsReflex: "reflex",
+    gbsCoughSwallow: "coughSwallow",
+    gbsAspiration: "aspiration",
+    gbsVc: "vc",
+    gbsMonitor: "monitor",
+    gbsAbga: "abga",
+    gbsSuction: "suction",
+    gbsWallOxygen: "oxygen",
+    gbsCallCharge: "chargeCalled",
+    gbsUpdateCharge: "updateCharge",
+  };
+  const gbsActionId = actionById[actionId];
+  if (!gbsActionId) return false;
+
+  if (!state.wardObjectScoreMarks) state.wardObjectScoreMarks = {};
+  const scoreKey = state.stage + ":" + actionId;
+  const scoreById = {
+    gbsMotor: { clinical: 4, safety: 2 },
+    gbsReflex: { clinical: 4 },
+    gbsCoughSwallow: { safety: 5, clinical: 5, empathy: 2 },
+    gbsAspiration: { safety: 5, protocol: 3 },
+    gbsVc: { safety: 6, clinical: 6, protocol: 3 },
+    gbsMonitor: { safety: 4, clinical: 5 },
+    gbsAbga: { clinical: 5, protocol: 4 },
+    gbsSuction: { safety: 5, protocol: 4 },
+    gbsWallOxygen: { safety: 3, clinical: 2 },
+    gbsCallCharge: { safety: 6, clinical: 6, protocol: 5 },
+    gbsUpdateCharge: { safety: 4, clinical: 5, protocol: 4 },
+  };
+  if (!state.wardObjectScoreMarks[scoreKey]) {
+    applyScore(scoreById[actionId]);
+    state.wardObjectScoreMarks[scoreKey] = true;
+  }
+
+  const logById = {
+    gbsMotor: "신경 사정: 상행성 weakness progression을 확인했습니다.",
+    gbsReflex: "신경 사정: DTR/reflex 감소를 확인했습니다.",
+    gbsCoughSwallow: "bulbar 사정: weak cough, drooling/dysphagia 위험을 확인했습니다.",
+    gbsAspiration: "airway 중재: aspiration precaution을 적용했습니다.",
+    gbsVc: "호흡근 사정: vital capacity를 측정했습니다.",
+    gbsMonitor: "모니터 해석: EtCO₂, ECG, BP fluctuation을 확인했습니다.",
+    gbsAbga: "검사 준비: ABGA로 CO₂ retention 여부를 확인합니다.",
+    gbsSuction: "airway 준비: suction과 airway cart를 준비했습니다.",
+    gbsWallOxygen: "벽 산소: flowmeter를 연결하고 산소 적용을 시작했습니다.",
+    gbsCallCharge: "차지 호출: GBS respiratory failure 전조를 묶어 보고했습니다.",
+    gbsUpdateCharge: "차지 업데이트: 최신 VC/EtCO₂/cough-swallow 변화를 전달했습니다.",
+  };
+  if (!["gbsMotor", "gbsReflex", "gbsCoughSwallow", "gbsAspiration", "gbsVc", "gbsMonitor", "gbsAbga", "gbsSuction"].includes(actionId)) {
+    addLog(logById[actionId], "good");
+  }
+  gbsAction(gbsActionId);
+
+  if (gbsActionId === "chargeCalled") {
+    state.stage = "gbsEscalationNotify";
+  } else if (["gbsIntro"].includes(state.stage)) {
+    state.stage = "gbsDeterioration";
+  }
+
+  render();
+  return true;
 }
 
 function performWardObjectAction(actionId) {
@@ -3281,7 +3655,7 @@ function openClinicalInteractionMenu(target, point = {}) {
 
   menu.actions.forEach((item) => {
     const button = document.createElement("button");
-    const completed = item.id.startsWith("ward") ? wardInteractionStatus(item.id) : isAssessmentComplete(item.assessment);
+    const completed = item.id.startsWith("gbs") ? gbsInteractionStatus(item.id) : item.id.startsWith("ward") ? wardInteractionStatus(item.id) : isAssessmentComplete(item.assessment);
     const lock = lockedActionInfo(target, item.id);
     const statusText = lock.locked ? "사정 필요" : completed ? "완료" : "대기";
     button.type = "button";
@@ -3294,7 +3668,7 @@ function openClinicalInteractionMenu(target, point = {}) {
     const historyProgress = item.id === "history" ? answeredRequiredCount() + "/" + requiredHistoryQuestions().length : "";
     const actionStatus = item.id === "history"
       ? (patientHistoryReviewed() ? "완료" : state.stage === "historyTaking" ? "진행" : "대화")
-      : item.id.startsWith("ward") || item.assessment || lock.locked ? statusText : "선택";
+      : item.id.startsWith("gbs") || item.id.startsWith("ward") || item.assessment || lock.locked ? statusText : "선택";
     button.innerHTML = `
       <span>${actionStatus}</span>
       <strong>${item.label}</strong>
@@ -3450,6 +3824,11 @@ function closeEcgProcedureOverlay() {
 }
 
 function handleClinicalMenuAction(target, actionId) {
+  if (isGbsEpisode() && actionId.startsWith("gbs")) {
+    performGbsObjectAction(actionId);
+    return;
+  }
+
   if (isWardWorkflowEpisode() && actionId.startsWith("ward")) {
     performWardObjectAction(actionId);
     return;
@@ -3552,6 +3931,8 @@ function renderEmr() {
 
   const vitals = currentVitals();
   const tab = state.emrTab || "summary";
+  const profile = currentPatientProfile();
+  if (emrTitleEl) emrTitleEl.textContent = profile.name;
 
   emrTabButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.emrTab === tab);
@@ -3560,14 +3941,14 @@ function renderEmr() {
   const summaryMarkup = `
     <section class="emr-grid">
       <article class="emr-card">
-        <h3>Patient</h3>
-        <dl>
-          <dt>Name</dt><dd>${patient.name}</dd>
-          <dt>Age</dt><dd>${patient.age}</dd>
-          <dt>Diagnosis</dt><dd>${patient.diagnosis}</dd>
-          <dt>주호소</dt><dd>${patient.chiefComplaint}</dd>
-          <dt>수술 계획</dt><dd>${patient.plannedSurgery}</dd>
-          <dt>상태</dt><dd>${patient.pod}</dd>
+          <h3>Patient</h3>
+          <dl>
+          <dt>Name</dt><dd>${profile.name}</dd>
+          <dt>Age</dt><dd>${profile.age}</dd>
+          <dt>Diagnosis</dt><dd>${profile.diagnosis}</dd>
+          <dt>주호소</dt><dd>${profile.chiefComplaint}</dd>
+          <dt>계획</dt><dd>${profile.plannedSurgery}</dd>
+          <dt>상태</dt><dd>${profile.pod}</dd>
         </dl>
       </article>
       <article class="emr-card">
@@ -3606,7 +3987,7 @@ function renderEmr() {
       <table class="emr-table">
         <thead><tr><th>Lab</th><th>Result</th><th>Normal</th><th>Flag</th></tr></thead>
         <tbody>
-          ${patient.labs.map((lab) => `<tr class="${lab.flag === "High" ? "alert" : ""}"><td>${lab.name}</td><td>${lab.value} ${lab.unit}</td><td>${lab.normal}</td><td>${lab.flag}</td></tr>`).join("")}
+          ${profile.labs.map((lab) => `<tr class="${lab.flag === "High" ? "alert" : ""}"><td>${lab.name}</td><td>${lab.value} ${lab.unit}</td><td>${lab.normal}</td><td>${lab.flag}</td></tr>`).join("")}
         </tbody>
       </table>
     </section>
@@ -3617,7 +3998,7 @@ function renderEmr() {
       <article class="emr-card">
         <h3>정규 처방</h3>
         <ul class="emr-list">
-          ${patient.regularOrders.map((order) => `<li class="${state.appliedRegularOrders.includes(order.id) ? "done" : ""}">${order.label}</li>`).join("")}
+          ${profile.regularOrders.map((order) => `<li class="${state.appliedRegularOrders.includes(order.id) ? "done" : ""}">${order.label}</li>`).join("")}
         </ul>
         <div class="emr-action-row">
           <button type="button" data-emr-action="regularMedication">정규 약물 투여 열기</button>
@@ -3626,7 +4007,7 @@ function renderEmr() {
       <article class="emr-card">
         <h3>PRN 처방</h3>
         <ul class="emr-list">
-          ${patient.prnOrders.map((order) => `<li class="${state.prnMedicationsGiven.includes(order.id) ? "done" : ""}">${order.label}<span>적응증: ${order.indication}</span></li>`).join("")}
+          ${profile.prnOrders.map((order) => `<li class="${state.prnMedicationsGiven.includes(order.id) ? "done" : ""}">${order.label}<span>적응증: ${order.indication}</span></li>`).join("")}
         </ul>
         <div class="emr-action-row">
           <button type="button" data-emr-action="prnMedication">PRN 약물 투여 열기</button>
@@ -3640,7 +4021,7 @@ function renderEmr() {
       <article class="emr-card">
         <h3>투약 정보</h3>
         <dl>
-          <dt>체중</dt><dd>${patient.weightKg} kg</dd>
+          <dt>체중</dt><dd>${profile.weightKg} kg</dd>
           <dt>알레르기</dt><dd>${state.askedQuestions.includes("allergy") ? "특이 약물 알레르기 없음" : "미확인"}</dd>
           <dt>통증 상태</dt><dd>${emrKnownValue(state.knownPatientInfo.pain, `${state.patientStatus.pain}/10`)}</dd>
           <dt>호흡 상태</dt><dd>${emrKnownValue(state.knownPatientInfo.breathing, breathingLabel(state.patientStatus.breathing))}</dd>
@@ -3651,7 +4032,7 @@ function renderEmr() {
       <article class="emr-card">
         <h3>정규 투약/중재</h3>
         <ul class="emr-list">
-          ${patient.regularOrders.map((order) => `<li class="${state.appliedRegularOrders.includes(order.id) ? "done" : ""}">${order.label}<span>${state.appliedRegularOrders.includes(order.id) ? "적용 완료" : "미적용"}</span></li>`).join("")}
+          ${profile.regularOrders.map((order) => `<li class="${state.appliedRegularOrders.includes(order.id) ? "done" : ""}">${order.label}<span>${state.appliedRegularOrders.includes(order.id) ? "적용 완료" : "미적용"}</span></li>`).join("")}
         </ul>
         <div class="emr-action-row">
           <button type="button" data-emr-action="regularMedication">정규 약물 투여 열기</button>
@@ -3660,7 +4041,7 @@ function renderEmr() {
       <article class="emr-card">
         <h3>PRN 투약</h3>
         <ul class="emr-list">
-          ${patient.prnOrders.map((order) => `<li class="${state.prnMedicationsGiven.includes(order.id) ? "done" : ""}">${order.label}<span>${state.prnMedicationsGiven.includes(order.id) ? "투여 완료" : `적응증: ${order.indication}`}</span></li>`).join("")}
+          ${profile.prnOrders.map((order) => `<li class="${state.prnMedicationsGiven.includes(order.id) ? "done" : ""}">${order.label}<span>${state.prnMedicationsGiven.includes(order.id) ? "투여 완료" : `적응증: ${order.indication}`}</span></li>`).join("")}
         </ul>
         <div class="emr-action-row">
           <button type="button" data-emr-action="prnMedication">PRN 약물 투여 열기</button>
@@ -3669,8 +4050,35 @@ function renderEmr() {
     </section>
   `;
 
+  const gbs = state.gbsWorkflow || {};
+  const gbsRecords = state.gbsAssessmentRecords || [];
+  const gbsAssessmentMarkup = isGbsEpisode() ? `
+      <article class="emr-card emr-notes neuro-assessment-note">
+        <h3>GBS 신경/호흡 사정 기록</h3>
+        <dl>
+          <dt>GCS</dt><dd>E4 V5 M6 · 대화 가능하나 말이 짧아짐</dd>
+          <dt>Motor</dt><dd>${gbs.motorChecked ? "BLE 4-/5, ankle dorsiflexion 약화" : "미기록"}</dd>
+          <dt>DTR</dt><dd>${gbs.reflexChecked ? "Patellar/ankle reflex 양측 감소" : "미기록"}</dd>
+          <dt>Cough/Swallow</dt><dd>${gbs.coughSwallowChecked ? "Weak cough, drooling/dysphagia 위험" : "미기록"}</dd>
+          <dt>VC / EtCO₂</dt><dd>${Math.round(gbs.vc || 0)} mL/kg · ${Math.round(gbs.etco2 || 0)} mmHg</dd>
+          <dt>Head-up</dt><dd>${gbs.headOfBedRaised ? "침상 머리 30-45도 상승, PO 보류" : "미적용"}</dd>
+          <dt>Suction</dt><dd>${gbs.suctionReady ? "Wall suction/canister/airway cart bedside 준비" : "미준비"}</dd>
+        </dl>
+        <ul class="emr-list neuro-record-list">
+          ${gbsRecords.length ? gbsRecords.map((item) => `
+            <li>
+              <strong>T+${item.minute} min · ${item.label}</strong>
+              <span>${item.value}</span>
+              ${item.interpretation ? `<small>${item.interpretation}</small>` : ""}
+            </li>
+          `).join("") : "<li>아직 GBS neuro/respiratory 사정 기록이 없습니다.</li>"}
+        </ul>
+      </article>
+  ` : "";
+
   const notesMarkup = `
     <section class="emr-grid emr-notes-grid">
+      ${gbsAssessmentMarkup}
       <article class="emr-card emr-notes">
         <h3>간호기록</h3>
         <ul class="emr-list">
@@ -3716,7 +4124,7 @@ emrContentEl?.addEventListener("click", (event) => {
 
 
 function isPatientLoopActive() {
-  return !entryFlowActive() && !state.outcome && !["goodEnd", "badEnd", "wardGoodEnd", "wardBadEnd"].includes(state.stage);
+  return !entryFlowActive() && !state.outcome && !["goodEnd", "badEnd", "wardGoodEnd", "wardBadEnd", "gbsGoodEnd", "gbsBadEnd"].includes(state.stage);
 }
 
 function hasActiveClinicalIntervention() {
@@ -3730,6 +4138,58 @@ function hasActiveClinicalIntervention() {
 
 
 function calculateClinicalUrgency() {
+  if (isGbsEpisode()) {
+    const vitals = currentVitals();
+    const gbs = state.gbsWorkflow || createGbsWorkflowState();
+    const [systolic = 0] = String(vitals.bp).split("/").map(Number);
+    let score = 0;
+    const drivers = [];
+
+    if (gbs.vc <= 18) {
+      score += 4;
+      drivers.push("low VC");
+    } else if (gbs.vc <= 22) {
+      score += 2;
+      drivers.push("falling VC");
+    }
+
+    if (gbs.etco2 >= 46) {
+      score += 4;
+      drivers.push("rising EtCO₂");
+    } else if (gbs.etco2 >= 42) {
+      score += 2;
+      drivers.push("EtCO₂ watch");
+    }
+
+    if (vitals.rr >= 30) {
+      score += 3;
+      drivers.push("tachypnea");
+    } else if (vitals.rr >= 24) {
+      score += 1;
+      drivers.push("RR rising");
+    }
+
+    if (gbs.bulbarFunction <= 52) {
+      score += 3;
+      drivers.push("dysphagia/aspiration risk");
+    } else if (gbs.bulbarFunction <= 62) {
+      score += 1;
+      drivers.push("weak cough/swallow");
+    }
+
+    if (gbs.autonomicStability <= 45 || systolic < 90 || vitals.hr <= 50 || vitals.hr >= 125) {
+      score += 3;
+      drivers.push("dysautonomia");
+    } else if (gbs.autonomicStability <= 58) {
+      score += 1;
+      drivers.push("BP/HR fluctuation");
+    }
+
+    const level = score >= 9 ? "critical" : score >= 6 ? "severe" : score >= 3 ? "moderate" : "mild";
+    const label = { mild: "낮음", moderate: "주의", severe: "높음", critical: "위급" }[level];
+    return { level, score, label, drivers, vitals };
+  }
+
   if (isWardWorkflowEpisode()) {
     const vitals = currentVitals();
     const ward = state.wardWorkflow || createWardWorkflowState();
@@ -4225,6 +4685,10 @@ function tickPatientState() {
     tickWardWorkflowState();
     return;
   }
+  if (isGbsEpisode()) {
+    tickGbsState();
+    return;
+  }
 
   const urgency = updateClinicalUrgency({ log: true });
   const interventionActive = hasActiveClinicalIntervention();
@@ -4333,6 +4797,193 @@ function tickWardWorkflowState() {
   renderPatientStatus();
   renderLogs();
   window.update3D?.(state, state.monitorOn ? currentVitals() : null);
+}
+
+function gbsStabilizationReady(actions = gbsReadyActions()) {
+  return actions.motor &&
+    actions.reflex &&
+    actions.coughSwallow &&
+    actions.vc &&
+    actions.etco2 &&
+    actions.abga &&
+    actions.aspiration &&
+    actions.suction &&
+    actions.charge &&
+    actions.updateCharge &&
+    actions.bedside;
+}
+
+function gbsInstruction() {
+  const gbs = state.gbsWorkflow || createGbsWorkflowState();
+  if (!gbs.vcChecked) return "차지: SpO₂만 보지 말고 VC 먼저 확인해주세요. 저는 담당의와 ICU 노티 준비할게요.";
+  if (!gbs.monitorReviewed) return "차지: EtCO₂와 ECG/BP fluctuation 계속 봐주세요.";
+  if (!gbs.coughSwallowChecked || !gbs.aspirationPrecaution) return "차지: swallowing과 cough 힘 확인하고 aspiration precaution 잡아주세요.";
+  if (!gbs.abgaChecked) return "차지: ABGA 준비해서 CO₂ retention 확인해주세요.";
+  return "차지: 좋아요. ICU escalation 보고 중이니 VC, EtCO₂, cough/swallow 변화를 계속 업데이트해주세요.";
+}
+
+function gbsAction(action) {
+  if (!state.gbsWorkflow) state.gbsWorkflow = createGbsWorkflowState();
+  const gbs = state.gbsWorkflow;
+  gbs.bedsidePresence = action !== "leftBedside";
+
+  if (action === "motor") {
+    gbs.motorChecked = true;
+    gbs.weaknessLevel = clamp(gbs.weaknessLevel + 2, 0, 100);
+    addLog("상하지 근력 사정: 양측 하지 4-/5, 발목 dorsiflexion 약화. 손 grip은 4+/5입니다. 다음은 reflex와 호흡근 지표를 연결해서 봐야 합니다.", "good");
+    recordGbsAssessment("neuro", "Motor strength", "BLE 4-/5, ankle dorsiflexion 약화, grip 4+/5", "상행성 weakness progression 추적 필요");
+  }
+  if (action === "reflex") {
+    gbs.reflexChecked = true;
+    gbs.reflexLoss = clamp(gbs.reflexLoss + 4, 0, 100);
+    addLog("DTR 사정: patellar/ankle reflex가 양측에서 감소했습니다. GBS의 말초신경 침범 근거가 강해졌습니다.", "good");
+    recordGbsAssessment("neuro", "DTR/reflex", "Patellar/ankle reflex 양측 감소", "말초신경 탈수초성 변화와 일치");
+  }
+  if (action === "coughSwallow") {
+    gbs.coughSwallowChecked = true;
+    gbs.bulbarFunction = clamp(gbs.bulbarFunction - 2, 0, 100);
+    addLog("Bulbar 사정: 기침이 약하고 물 삼킬 때 사레 위험을 보입니다. aspiration precaution과 suction 준비를 생각해야 합니다.", "warning");
+    recordGbsAssessment("airway", "Cough/Swallow", "Weak cough, drooling, dysphagia risk", "bulbar weakness 가능성. 흡인 예방과 suction 준비 필요");
+  }
+  if (action === "vc") {
+    gbs.vcChecked = true;
+    gbs.vc = clamp(gbs.vc - 0.4, 12, 32);
+    addLog("Vital capacity 측정: VC " + Math.round(gbs.vc) + " mL/kg. 아직 즉시 intubation 수치는 아니지만 하락 추세면 ICU escalation 근거입니다.", "good");
+    recordGbsAssessment("respiratory", "Vital capacity", Math.round(gbs.vc) + " mL/kg", "SpO₂보다 조기 호흡근 악화 추적에 중요");
+  }
+  if (action === "monitor") {
+    gbs.monitorReviewed = true;
+    state.monitorOn = true;
+    state.ekgAttached = true;
+    addLog("모니터 확인: SpO₂ " + currentVitals().spo2 + "%, EtCO₂ " + Math.round(gbs.etco2) + ", BP/HR fluctuation 관찰 중. SpO₂보다 CO₂와 VC 추세가 중요합니다.", "good");
+    recordGbsAssessment("monitor", "EtCO₂/ECG/BP", "EtCO₂ " + Math.round(gbs.etco2) + " mmHg, BP/HR fluctuation 관찰", "dysautonomia와 CO₂ retention 추적");
+  }
+  if (action === "abga") {
+    gbs.abgaChecked = true;
+    gbs.etco2 = clamp(gbs.etco2 + 0.4, 34, 58);
+    addLog("ABGA 준비: PaCO₂ 상승 여부를 확인할 계획입니다. GBS에서는 산소포화도보다 hypoventilation/CO₂ retention을 놓치면 위험합니다.", "good");
+    recordGbsAssessment("lab", "ABGA 준비", "PaCO₂ 상승 여부 확인 예정", "hypoventilation/CO₂ retention 배제 필요");
+  }
+  if (action === "aspiration") {
+    gbs.aspirationPrecaution = true;
+    gbs.headOfBedRaised = true;
+    gbs.bulbarFunction = clamp(gbs.bulbarFunction + 3, 0, 100);
+    addLog("Aspiration precaution: 침상 머리를 올리고 PO 보류, 삼킴/침 분비를 관찰합니다.", "good");
+    recordGbsAssessment("airway", "Aspiration precaution", "HOB 30-45도 상승, PO 보류, 침 분비 관찰", "머리 올림이 3D 침상과 EMR에 반영됨");
+  }
+  if (action === "suction") {
+    gbs.suctionReady = true;
+    gbs.bulbarFunction = clamp(gbs.bulbarFunction + 2, 0, 100);
+    addLog("Suction 준비: weak cough와 drooling에 대비해 suction과 airway cart를 bedside에 준비했습니다.", "good");
+    recordGbsAssessment("airway", "Wall suction", "흡인 압력 확인, canister/catheter/airway cart 준비", "weak cough와 drooling 악화 대비");
+  }
+  if (action === "oxygen") {
+    gbs.oxygenApplied = true;
+    state.oxygenApplied = true;
+    addLog("Wall O₂ 적용: 산소 라인을 연결했습니다. SpO₂ 보정만으로 안심하지 말고 VC/EtCO₂를 계속 봅니다.", "warning");
+    recordGbsAssessment("respiratory", "Wall O₂", "Flowmeter 연결 후 O₂ 적용", "산소는 보조 중재이며 호흡근 평가를 대체하지 않음");
+  }
+  if (action === "chargeCalled") {
+    gbs.chargeCalled = true;
+    gbs.chargeAtBedside = true;
+    gbs.icuEscalated = true;
+    addLog(gbsInstruction(), "good");
+    recordGbsAssessment("communication", "Charge call", "GBS respiratory failure 전조를 묶어 보고", "차지 bedside 도착 및 ICU/담당의 escalation 시작");
+  }
+  if (action === "updateCharge") {
+    gbs.updatedCharge = true;
+    addLog("차지 업데이트: 최신 VC " + gbs.vc + " mL/kg, EtCO₂ " + gbs.etco2 + ", cough/swallow 변화를 전달했습니다.", "good");
+    recordGbsAssessment("communication", "Charge update", "VC " + Math.round(gbs.vc) + " mL/kg, EtCO₂ " + Math.round(gbs.etco2) + " mmHg, cough/swallow 상태 전달", "ICU escalation 중 최신 bedside 정보 공유");
+  }
+  if (action === "waited") {
+    gbs.waitedTicks += 1;
+    gbs.respiratoryStrength = clamp(gbs.respiratoryStrength - 7, 0, 100);
+    gbs.bulbarFunction = clamp(gbs.bulbarFunction - 5, 0, 100);
+    gbs.etco2 = clamp(gbs.etco2 + 4, 34, 60);
+  }
+  if (action === "leftBedside") {
+    gbs.leftBedsideTicks += 1;
+    gbs.bedsidePresence = false;
+    gbs.respiratoryStrength = clamp(gbs.respiratoryStrength - 9, 0, 100);
+    gbs.autonomicStability = clamp(gbs.autonomicStability - 8, 0, 100);
+  }
+
+  refreshBedsidePhysiologyDisplay();
+
+  if (gbs.chargeCalled && gbsStabilizationReady()) {
+    setGbsOutcome("stabilized", "SpO₂만 보지 않고 VC, EtCO₂, ABGA, cough/swallow, dysautonomia를 묶어 조기 ICU escalation을 진행했습니다.", [
+      "VC/EtCO₂/ABGA로 호흡근 악화 확인",
+      "cough/swallow 확인과 aspiration precaution",
+      "ECG/BP fluctuation monitoring",
+      "차지에게 최신 상태 업데이트",
+    ]);
+  }
+}
+
+function tickGbsState() {
+  if (!state.gbsWorkflow) state.gbsWorkflow = createGbsWorkflowState();
+  const gbs = state.gbsWorkflow;
+  const inActiveGbsStage = ["gbsIntro", "gbsDeterioration", "gbsEscalationNotify"].includes(state.stage);
+  if (!inActiveGbsStage) return;
+
+  const monitorRelief = gbs.monitorReviewed ? 0.28 : 0;
+  const airwayRelief = (gbs.aspirationPrecaution ? 0.22 : 0) + (gbs.suctionReady ? 0.18 : 0);
+  const escalationRelief = gbs.chargeCalled ? 0.32 : 0;
+  gbs.respiratoryStrength = clamp(gbs.respiratoryStrength - 0.72 + monitorRelief + airwayRelief + escalationRelief, 0, 100);
+  gbs.bulbarFunction = clamp(gbs.bulbarFunction - 0.52 + airwayRelief, 0, 100);
+  gbs.autonomicStability = clamp(gbs.autonomicStability - 0.48 + monitorRelief * 0.25, 0, 100);
+  gbs.weaknessLevel = clamp(gbs.weaknessLevel + 0.42, 0, 100);
+  gbs.vc = clamp(gbs.vc - 0.16 - Math.max(0, 60 - gbs.respiratoryStrength) / 85, 10, 32);
+  gbs.etco2 = clamp(gbs.etco2 + 0.18 + Math.max(0, 58 - gbs.respiratoryStrength) / 70, 34, 60);
+  gbs.notificationTicks += gbs.chargeCalled ? 1 : 0;
+  state.elapsedMinutes += 1;
+
+  const urgency = updateClinicalUrgency({ log: true });
+  const actions = gbsReadyActions();
+  if (gbs.chargeCalled && gbs.notificationTicks % 2 === 1) addLog(gbsInstruction(), urgency.level === "critical" ? "warning" : "good");
+
+  if (urgency.level === "critical" && state.elapsedMinutes >= 10 && (!gbs.chargeCalled || gbs.waitedTicks >= 2 || gbs.vc <= 13 || gbs.etco2 >= 54)) {
+    setGbsOutcome("deteriorated", "GBS 호흡근 악화가 늦게 인지되어 impending respiratory failure로 진행했습니다.", [
+      "VC " + Math.round(gbs.vc) + " mL/kg",
+      "EtCO₂ " + Math.round(gbs.etco2),
+      "weak cough/swallow와 dysautonomia 지속",
+    ]);
+    return;
+  }
+
+  if (gbs.chargeCalled && gbs.notificationTicks >= 3 && gbsStabilizationReady(actions) && urgency.level !== "critical") {
+    setGbsOutcome("stabilized", "호흡근 악화 전조를 조기에 묶어 보고하고 ICU escalation 준비가 진행되었습니다.", [
+      "VC/EtCO₂/ABGA 추적",
+      "aspiration precaution과 suction 준비",
+      "ECG/BP fluctuation monitoring",
+      "차지/의사 노티 중 bedside 지속",
+    ]);
+    return;
+  }
+
+  renderVitals();
+  renderPatientStatus();
+  renderLogs();
+  window.update3D?.(state, state.monitorOn ? currentVitals() : null);
+}
+
+function setGbsOutcome(type, reason, details = []) {
+  if (state.outcome) return;
+  const urgency = state.urgency || calculateClinicalUrgency();
+  const vitals = currentVitals();
+  state.outcome = {
+    type,
+    reason,
+    details,
+    minute: state.elapsedMinutes,
+    vitals,
+    urgency,
+    actions: gbsReadyActions(),
+  };
+  state.stabilized = type === "stabilized";
+  state.stage = type === "stabilized" ? "gbsGoodEnd" : "gbsBadEnd";
+  addLog(type === "stabilized" ? "결과: GBS respiratory risk를 조기에 escalation했습니다." : "결과: GBS 호흡부전 전조 인지가 지연되었습니다.", type === "stabilized" ? "good" : "bad");
+  render();
 }
 
 function setWardOutcome(type, reason, details = []) {
@@ -4642,6 +5293,15 @@ function renderEcgMonitoringOverlay(mode = "review") {
   const plethPoints = createPlethSvgPoints(vitals);
   const shell = document.createElement("div");
   shell.className = "ecg-monitoring-shell monitor-focused";
+  const gbs = isGbsEpisode() ? (state.gbsWorkflow || createGbsWorkflowState()) : null;
+  const neuroMetrics = gbs
+    ? "<div class=\"device-neuro-strip\">" +
+        "<span>VC <strong>" + Math.round(gbs.vc) + "</strong> mL/kg</span>" +
+        "<span>EtCO₂ <strong>" + Math.round(gbs.etco2) + "</strong> mmHg</span>" +
+        "<span>Cough/Swallow <strong>" + (gbs.bulbarFunction <= 62 ? "WEAK" : "WATCH") + "</strong></span>" +
+        "<span>BP/HR <strong>" + (gbs.autonomicStability <= 58 ? "LABILE" : "WATCH") + "</strong></span>" +
+      "</div>"
+    : "";
   shell.innerHTML =
     "<div class=\"bedside-device-bezel\">" +
       "<div class=\"device-monitor-screen\">" +
@@ -4659,6 +5319,7 @@ function renderEcgMonitoringOverlay(mode = "review") {
             "<div class=\"bp\"><dt>NIBP</dt><dd>" + vitals.bp + "<small>mmHg</small></dd></div>" +
           "</dl>" +
         "</div>" +
+        neuroMetrics +
         "<div class=\"device-observation-strip\"><span class=\"" + urgencyClass + "\">URG " + interpretation.urgencyLabel + "</span>" + interpretation.observations.map((note) => "<span>" + note + "</span>").join("") + "</div>" +
       "</div>" +
     "</div>";
@@ -4714,7 +5375,12 @@ function handleMonitorMenuAction(actionId) {
       const interpretation = monitorClinicalInterpretation();
       addLog("ECG 해석: " + interpretation.observations.join(" / "), firstReview ? "good" : "warning");
     }
+    if (isGbsEpisode() && state.gbsWorkflow) {
+      gbsAction("monitor");
+      addLog("모니터 확대: GBS 모드에서는 파형과 함께 VC, EtCO₂, cough/swallow, BP/HR fluctuation을 한 화면에서 추적합니다.", "good");
+    }
     render();
+    renderEcgMonitoringOverlay("review");
     return;
   }
 
@@ -5387,6 +6053,27 @@ function renderVitals() {
 }
 
 function currentVitals() {
+  if (isGbsEpisode()) {
+    const gbs = state.gbsWorkflow || createGbsWorkflowState();
+    const respiratoryLoad = Math.max(0, 72 - gbs.respiratoryStrength);
+    const autonomicLoad = Math.max(0, 70 - gbs.autonomicStability);
+    const oxygenBoost = gbs.oxygenApplied || state.oxygenApplied ? 2 : 0;
+    const spo2 = clamp(Math.round(97 + oxygenBoost - respiratoryLoad / 8 - Math.max(0, gbs.etco2 - 42) / 5), 88, 99);
+    const rr = clamp(Math.round(17 + respiratoryLoad / 2.7 + Math.max(0, gbs.etco2 - 40) / 2.8), 12, 38);
+    const hrSwing = autonomicLoad >= 18 && state.elapsedMinutes % 3 === 0 ? -34 : autonomicLoad * 0.95;
+    const hr = clamp(Math.round(88 + hrSwing + respiratoryLoad * 0.25), 42, 138);
+    const systolicSwing = autonomicLoad >= 16 && state.elapsedMinutes % 2 === 0 ? 22 : -autonomicLoad * 0.72;
+    const systolic = clamp(Math.round(124 + systolicSwing), 82, 164);
+    const diastolic = clamp(Math.round(76 + systolicSwing * 0.35), 48, 96);
+
+    return {
+      hr,
+      spo2,
+      rr,
+      bp: String(systolic) + "/" + String(diastolic),
+    };
+  }
+
   if (isWardWorkflowEpisode()) {
     const ward = state.wardWorkflow || createWardWorkflowState();
     const oxygenSupport = ward.oxygenApplied ? 4 : 0;
@@ -5541,6 +6228,18 @@ function createClinicalActionPrompt(scene) {
       title: "노티 중 acting task",
       text: "차지가 의사에게 전화하는 동안 repeat BP, SpO₂, IV, mental change를 계속 업데이트하세요.",
     },
+    gbsIntro: {
+      title: "GBS 핵심 함정",
+      text: "SpO₂가 아직 정상이어도 안심하지 마세요. 환자와 모니터를 클릭해 VC, EtCO₂, cough/swallow, reflex 변화를 확인하세요.",
+    },
+    gbsDeterioration: {
+      title: "호흡근 악화 감지",
+      text: "말이 짧아지고 기침 힘이 약해집니다. airway 준비, aspiration precaution, ABGA, 차지 호출을 이어가세요.",
+    },
+    gbsEscalationNotify: {
+      title: "ICU escalation 중",
+      text: "차지가 노티 중입니다. VC/EtCO₂/cough-swallow와 BP/HR fluctuation을 계속 업데이트하세요.",
+    },
     postSbarBedside: {
       title: "보고 후에도 끝이 아닙니다",
       text: "차지가 담당의에게 노티하는 동안 환자 곁에서 repeat BP, pain, SpO₂, ECG 변화를 계속 업데이트하세요.",
@@ -5593,6 +6292,41 @@ function createWardBedsideHelp() {
       ).join("") +
     "</ul>" +
     "<p class=\"ward-help-next\">" + nextHint + "</p>";
+  return helper;
+}
+
+function createGbsBedsideHelp() {
+  const gbs = state.gbsWorkflow || createGbsWorkflowState();
+  const actions = gbsReadyActions();
+  const vitals = currentVitals();
+  const helper = document.createElement("div");
+  helper.className = "ward-help-card";
+  const stageGuide = {
+    gbsIntro: "GBS에서는 SpO₂가 늦게 떨어질 수 있습니다. 먼저 호흡근과 bulbar sign을 찾으세요.",
+    gbsDeterioration: "말이 짧아지고 cough가 약해지면 VC/EtCO₂/ABGA와 airway 준비가 우선입니다.",
+    gbsEscalationNotify: "차지 노티 중에도 VC, EtCO₂, cough/swallow, BP/HR fluctuation을 업데이트하세요.",
+  };
+  const checklist = [
+    ["Motor", actions.motor, "환자 클릭"],
+    ["Reflex", actions.reflex, "환자 클릭"],
+    ["Cough/Swallow", actions.coughSwallow, "환자 클릭"],
+    ["VC", actions.vc, "모니터 클릭"],
+    ["EtCO₂/ECG/BP", actions.etco2, "모니터 클릭"],
+    ["ABGA", actions.abga, "모니터 클릭"],
+    ["Wall O₂", actions.oxygen, "벽 산소 아웃렛 클릭"],
+    ["Aspiration", actions.aspiration, "환자 클릭"],
+    ["Suction", actions.suction, "벽 suction 또는 airway 준비 클릭"],
+    ["Escalation", actions.charge, "전화기/차지 클릭"],
+    ["Update", actions.updateCharge, "차지 NPC 클릭"],
+  ];
+  helper.innerHTML =
+    "<strong>GBS Bedside 도움말</strong>" +
+    "<p>" + (stageGuide[state.stage] || "GBS respiratory risk를 bedside에서 추적하세요.") + "</p>" +
+    "<div class=\"ward-help-vitals\"><span>RR " + vitals.rr + "</span><span>VC " + Math.round(gbs.vc) + "</span><span>EtCO₂ " + Math.round(gbs.etco2) + "</span></div>" +
+    "<ul>" + checklist.map(([label, done, hint]) =>
+      "<li class=\"" + (done ? "done" : "pending") + "\"><span>" + (done ? "완료" : "다음") + "</span><strong>" + label + "</strong><small>" + hint + "</small></li>"
+    ).join("") + "</ul>" +
+    "<p class=\"ward-help-next\">SpO₂ " + vitals.spo2 + "%만 보고 안심하지 말고 VC/EtCO₂와 cough-swallow를 묶어 보고하세요.</p>";
   return helper;
 }
 
@@ -5661,15 +6395,25 @@ function renderActions(scene) {
 
   const clinicalPrompt = createClinicalActionPrompt(scene);
   if (clinicalPrompt) {
-    actionsEl.append(clinicalPrompt);
     if (isWardWorkflowEpisode()) {
+      actionsEl.append(createWardBedsideHelp());
+      actionsEl.append(clinicalPrompt);
       const guide = document.createElement("div");
       guide.className = "clinical-action-prompt compact ward-bedside-guide";
       guide.innerHTML = "<strong>3D 병실에서 직접 수행하세요.</strong><span>환자, 침상 모니터, IV 라인, 차지 간호사/전화기를 클릭해 액팅 간호사 행동을 이어갑니다. 오른쪽은 진행 요약만 보여줍니다.</span>";
       actionsEl.append(guide);
-      actionsEl.append(createWardBedsideHelp());
       return;
     }
+    if (isGbsEpisode()) {
+      actionsEl.append(createGbsBedsideHelp());
+      actionsEl.append(clinicalPrompt);
+      const guide = document.createElement("div");
+      guide.className = "clinical-action-prompt compact ward-bedside-guide";
+      guide.innerHTML = "<strong>3D 병실에서 직접 수행하세요.</strong><span>환자, 침상 모니터, airway/IV 준비, 차지 간호사/전화기를 클릭해 GBS 호흡근 위험을 추적합니다.</span>";
+      actionsEl.append(guide);
+      return;
+    }
+    actionsEl.append(clinicalPrompt);
     return;
   }
 
@@ -6078,7 +6822,7 @@ function createOutcomeSummary() {
   "</section>";
 }
 function renderEvaluation() {
-  const isEnd = state.stage === "goodEnd" || state.stage === "badEnd" || state.stage === "wardGoodEnd" || state.stage === "wardBadEnd";
+  const isEnd = state.stage === "goodEnd" || state.stage === "badEnd" || state.stage === "wardGoodEnd" || state.stage === "wardBadEnd" || state.stage === "gbsGoodEnd" || state.stage === "gbsBadEnd";
   evaluationEl.hidden = !isEnd;
   if (!isEnd) {
     evaluationBodyEl.innerHTML = "";
@@ -6118,6 +6862,36 @@ function renderEvaluation() {
       </ul>
       <ul class="evaluation-list">
         ${wardItems.map(([label, done]) => `<li><span>${label}</span><strong>${done ? "수행" : "누락"}</strong></li>`).join("")}
+      </ul>
+      <p class="evaluation-note">${note}</p>
+    `;
+    return;
+  }
+  if (isGbsEpisode()) {
+    const gbsActions = state.outcome?.actions || gbsReadyActions();
+    const gbsItems = [
+      ["Motor strength", gbsActions.motor],
+      ["DTR/reflex", gbsActions.reflex],
+      ["Cough/swallow", gbsActions.coughSwallow],
+      ["Vital capacity", gbsActions.vc],
+      ["EtCO₂/ECG/BP", gbsActions.etco2],
+      ["ABGA", gbsActions.abga],
+      ["Aspiration precaution", gbsActions.aspiration],
+      ["Suction 준비", gbsActions.suction],
+      ["Escalation", gbsActions.charge],
+      ["최신 업데이트", gbsActions.updateCharge],
+    ];
+    const note = state.outcome?.type === "stabilized"
+      ? "SpO₂만 보지 않고 respiratory muscle failure 전조를 조기에 묶어 escalation했습니다."
+      : "GBS에서는 SpO₂가 정상처럼 보여도 VC/EtCO₂/cough-swallow가 먼저 무너질 수 있습니다.";
+
+    evaluationBodyEl.innerHTML = `
+      ${createOutcomeSummary()}
+      <ul class="evaluation-list">
+        ${scoreLabels.map(([label, score]) => `<li><span>${label}</span><strong>${score}</strong></li>`).join("")}
+      </ul>
+      <ul class="evaluation-list">
+        ${gbsItems.map(([label, done]) => `<li><span>${label}</span><strong>${done ? "수행" : "누락"}</strong></li>`).join("")}
       </ul>
       <p class="evaluation-note">${note}</p>
     `;
@@ -6172,6 +6946,13 @@ function render() {
   syncCompletedAssessments();
   const scene = scenes[state.stage];
   renderClinicalData();
+  if (scenarioLabelEl) {
+    scenarioLabelEl.textContent = isGbsEpisode()
+      ? "GBS respiratory watch"
+      : isWardWorkflowEpisode()
+        ? "Ward workflow mode"
+        : "ACS bedside scenario";
+  }
   scoreEl.textContent = "Score " + averageScore();
   safetyScoreEl.textContent = state.scores.safety;
   clinicalScoreEl.textContent = state.scores.clinical;
@@ -6215,6 +6996,7 @@ episodeBackHomeEl?.addEventListener("click", returnToTitleScreen);
 episodeStartEl?.addEventListener("click", () => startEpisode("acsChestPain"));
 episodeStartAcsEl?.addEventListener("click", () => startEpisode("acsChestPain"));
 episodeStartWardEl?.addEventListener("click", () => startEpisode("wardWorkflow"));
+episodeStartGbsEl?.addEventListener("click", () => startEpisode("gbsRespiratory"));
 simulationHomeEl?.addEventListener("click", returnToTitleScreen);
 
 resetGame();

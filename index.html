@@ -510,15 +510,85 @@
         headwallPanel.castShadow = true;
         scene.add(headwallPanel);
 
-        const oxygenOutlet = roundedBox(0.16, 0.09, 0.025, 0.018, new THREE.MeshStandardMaterial({ color: 0xa2d1c8, roughness: 0.48 }));
-        oxygenOutlet.position.set(0.2, 1.92, -3.05);
-        oxygenOutlet.castShadow = true;
-        scene.add(oxygenOutlet);
+        // === MEDICAL GAS OUTLETS — 의료가스 콘센트 (headwall panel) ===
+        // O2 = green  /  Vacuum(VAC) = amber  — Korean NFPA-99 / ISO 32657 color convention
+        const _outletPlateMat  = new THREE.MeshStandardMaterial({ color: 0xf1f3ef, roughness: 0.60 });
+        const _outletConnMat   = new THREE.MeshStandardMaterial({ color: 0xc8d0d4, roughness: 0.26, metalness: 0.48 });
+        const _outletPortMat   = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
+        const _outletPinMat    = new THREE.MeshStandardMaterial({ color: 0x96aeb8, roughness: 0.30, metalness: 0.52 });
 
-        const suctionOutlet = roundedBox(0.16, 0.09, 0.025, 0.018, new THREE.MeshStandardMaterial({ color: 0xd4d8d2, roughness: 0.48 }));
-        suctionOutlet.position.set(0.52, 1.92, -3.05);
-        suctionOutlet.castShadow = true;
-        scene.add(suctionOutlet);
+        let o2PlateMesh, o2ConnBody, vacPlateMesh, vacConnBody;
+
+        (function buildGasOutlets() {
+          function makeOutlet(cx, bandColor, labelText) {
+            const grp = new THREE.Group();
+            grp.position.set(cx, 1.920, -3.074);
+            scene.add(grp);
+
+            // mounting plate
+            const plate = roundedBox(0.164, 0.234, 0.032, 0.016, _outletPlateMat.clone());
+            plate.castShadow = true;
+            plate.receiveShadow = true;
+            grp.add(plate);
+
+            // top color band (gas-type identifier)
+            const bandMat = new THREE.MeshStandardMaterial({ color: bandColor, roughness: 0.38 });
+            const band = new THREE.Mesh(new THREE.BoxGeometry(0.164, 0.026, 0.036), bandMat);
+            band.position.set(0, 0.104, 0.002);
+            grp.add(band);
+
+            // connector body — cylinder pointing outward (+z)
+            const conn = new THREE.Mesh(new THREE.CylinderGeometry(0.027, 0.027, 0.066, 22), _outletConnMat.clone());
+            conn.rotation.x = Math.PI / 2;
+            conn.position.set(0, 0.010, 0.048);
+            conn.castShadow = true;
+            grp.add(conn);
+
+            // face ring (gas color)
+            const faceRingMat = new THREE.MeshStandardMaterial({ color: bandColor, roughness: 0.36 });
+            const faceRing = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.006, 8, 24), faceRingMat);
+            faceRing.rotation.x = Math.PI / 2;
+            faceRing.position.set(0, 0.010, 0.083);
+            grp.add(faceRing);
+
+            // port hole
+            const portFace = new THREE.Mesh(new THREE.CircleGeometry(0.013, 16), _outletPortMat);
+            portFace.position.set(0, 0.010, 0.0845);
+            grp.add(portFace);
+
+            // DISS index pin (safety interlock — small cylinder offset to right)
+            const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.034, 8), _outletPinMat);
+            pin.rotation.x = Math.PI / 2;
+            pin.position.set(0.027, 0.010, 0.063);
+            grp.add(pin);
+
+            // label canvas
+            const lblC = document.createElement("canvas");
+            lblC.width = 96; lblC.height = 48;
+            const lx = lblC.getContext("2d");
+            lx.fillStyle = "#efefed";
+            lx.fillRect(0, 0, 96, 48);
+            lx.fillStyle = "#" + bandColor.toString(16).padStart(6, "0");
+            lx.font = "bold 26px Arial";
+            lx.textAlign = "center";
+            lx.textBaseline = "middle";
+            lx.fillText(labelText, 48, 24);
+            const lblMesh = new THREE.Mesh(
+              new THREE.PlaneGeometry(0.086, 0.043),
+              new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(lblC) }),
+            );
+            lblMesh.position.set(0, -0.064, 0.018);
+            grp.add(lblMesh);
+
+            return { plate, conn };
+          }
+
+          const o2  = makeOutlet(0.20, 0x2ca04d, "O₂");
+          o2PlateMesh = o2.plate; o2ConnBody = o2.conn;
+
+          const vac = makeOutlet(0.52, 0xc49010, "VAC");
+          vacPlateMesh = vac.plate; vacConnBody = vac.conn;
+        }());
 
         const baseboardMaterial = new THREE.MeshStandardMaterial({ color: 0xd8e1e3, roughness: 0.62 });
         const backBaseboard = roundedBox(11.6, 0.12, 0.055, 0.018, baseboardMaterial);
@@ -941,6 +1011,7 @@
         let currentPain = 0;
         let latestVitals = null;
         let latestPatientState = null;
+        let headUpSmoothed = 0.0; // smoothed lerp target for GBS head-of-bed elevation
         let latestUrgency = { level: "mild", score: 0 };
         let is3DMonitorActive = false;
         let latestCueProfile = {
@@ -1075,9 +1146,11 @@
         const suctionOutletHotspot = new THREE.Mesh(new THREE.RingGeometry(0.085, 0.16, 28), outletRingMaterial.clone());
         suctionOutletHotspot.position.set(0.52, 1.92, -3.015);
         scene.add(suctionOutletHotspot);
-        registerInteractive(oxygenOutlet, "wallOxygen");
+        registerInteractive(o2PlateMesh,  "wallOxygen");
+        registerInteractive(o2ConnBody,   "wallOxygen");
         registerInteractive(oxygenOutletHotspot, "wallOxygen");
-        registerInteractive(suctionOutlet, "wallSuction");
+        registerInteractive(vacPlateMesh, "wallSuction");
+        registerInteractive(vacConnBody,  "wallSuction");
         registerInteractive(suctionOutletHotspot, "wallSuction");
 
         function makeTube(points, color, radius = 0.012, opacity = 1) {
@@ -2176,9 +2249,10 @@
           return texture;
         }
 
+        // SBAR phone — bedside cabinet top surface (cabinet top at y≈0.910)
         const phoneGroup = new THREE.Group();
-        phoneGroup.position.set(1.85, 1.07, 1.15);
-        phoneGroup.rotation.y = -0.18;
+        phoneGroup.position.set(2.88, 0.930, -0.54);
+        phoneGroup.rotation.y = 1.58;
         scene.add(phoneGroup);
 
         const phonePlastic = new THREE.MeshStandardMaterial({ color: 0x202b31, roughness: 0.62, metalness: 0.03 });
@@ -2490,7 +2564,7 @@
           patientModelRoot.position.z = patientSupineBase.position.z + Math.sin(time * 0.46) * cues.restlessness * 0.006;
           patientModelRoot.rotation.x = patientSupineBase.rotation.x;
           patientModelRoot.rotation.y = patientSupineBase.rotation.y + Math.sin(time * 0.33) * cues.restlessness * 0.012;
-          patientModelRoot.rotation.z = patientSupineBase.rotation.z + restlessnessMotion * 0.05 + shoulderTension * 0.08;
+          patientModelRoot.rotation.z = patientSupineBase.rotation.z + restlessnessMotion * 0.05 + shoulderTension * 0.08 + headUpSmoothed;
           patientModelRoot.scale.set(
             patientBaseScale * (1 + chestExpansion * 0.025),
             patientBaseScale * (1 + chestExpansion * 0.075),
@@ -2500,6 +2574,10 @@
           patientGownGroup.position.y = breathingMotion * 0.22 - responsivenessSlump * 0.45 + calmSettling;
           patientGownGroup.position.z = Math.sin(time * 0.46) * cues.restlessness * 0.01;
           patientGownGroup.scale.setScalar(1 + chestExpansion * 0.018);
+          // head-of-bed elevation (GBS aspiration precaution) — smooth lerp
+          const headUpTarget3D = Boolean(latestPatientState?.gbsWorkflow?.headOfBedRaised) ? 0.52 : 0.0;
+          headUpSmoothed += (headUpTarget3D - headUpSmoothed) * 0.038;
+
           if (patientBones.Spine2?.userData.restRotation) {
             patientBones.Spine2.rotation.copy(patientBones.Spine2.userData.restRotation);
             patientBones.Spine2.rotation.x += breathingMotion * 0.9 - cues.responsiveness * 0.04;
@@ -2517,9 +2595,9 @@
             patientBones.Head.rotation.x += breathingMotion * 0.28;
           }
           patientHeadAnchor.position.set(
-            patientHeadAnchorBase.x + restlessnessMotion * 0.55,
-            patientHeadAnchorBase.y + breathingMotion * 0.7 - responsivenessSlump,
-            patientHeadAnchorBase.z,
+            patientHeadAnchorBase.x + restlessnessMotion * 0.55 - headUpSmoothed * 0.08,
+            patientHeadAnchorBase.y + breathingMotion * 0.7 - responsivenessSlump + headUpSmoothed * 0.54,
+            patientHeadAnchorBase.z - headUpSmoothed * 0.08,
           );
           patientHairCap.position.x = patientHeadAnchor.position.x - 0.01;
           patientHairCap.position.y = patientHeadAnchor.position.y + 0.03;
@@ -2530,7 +2608,7 @@
           oxygenMask.position.z = patientHeadAnchor.position.z;
           oxygenMask.rotation.z = -0.12 + patientModelRoot.rotation.z * 0.08;
           ecgPads.forEach((pad, index) => {
-            pad.position.y = [1.57, 1.57, 1.52][index] + breathingMotion * (0.38 + index * 0.05);
+            pad.position.y = [1.57, 1.57, 1.52][index] + breathingMotion * (0.38 + index * 0.05) + headUpSmoothed * 0.22;
             pad.rotation.z = restlessnessMotion * 0.22;
           });
           ivBag.position.y = 2.42 + Math.sin(time * 0.18) * 0.006;

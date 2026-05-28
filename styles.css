@@ -2018,6 +2018,23 @@ body.emr-open {
   max-width: none;
 }
 
+.neuro-assessment-note {
+  grid-column: 1 / -1;
+}
+
+.neuro-assessment-note dl {
+  grid-template-columns: minmax(120px, 0.42fr) minmax(0, 1fr);
+}
+
+.neuro-record-list li {
+  display: grid;
+  gap: 5px;
+}
+
+.neuro-record-list small {
+  color: var(--muted);
+}
+
 .event-history-list li {
   display: grid;
   gap: 4px;
@@ -2412,6 +2429,9 @@ body.clinical-entry-active .workflow-hud {
 .ward-help-card {
   display: grid;
   gap: 9px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
   padding: 12px;
   border: 1px solid rgba(24, 33, 43, 0.12);
   border-radius: 8px;
@@ -3797,6 +3817,30 @@ body.clinical-entry-active .workflow-hud {
   font-size: 10px;
   font-weight: 900;
   line-height: 1.1;
+}
+
+.device-neuro-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.device-neuro-strip span {
+  display: grid;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  border-radius: 5px;
+  background: rgba(6, 22, 28, 0.86);
+  color: #9fb5bd;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.device-neuro-strip strong {
+  color: #7dd3fc;
+  font: 900 16px Menlo, Consolas, monospace;
 }
 
 .ecg-monitoring-shell.monitor-focused .ecg-monitoring-actions {
