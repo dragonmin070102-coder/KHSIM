@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>KHSIM</title>
-    <link rel="stylesheet" href="./styles.css?v=prototype4-ward11" />
+    <link rel="stylesheet" href="./styles.css?v=prototype4-gbs6" />
   </head>
   <body class="title-active">
     <section class="title-screen" id="title-screen" aria-labelledby="title-screen-title">
@@ -75,17 +75,19 @@
               <button type="button" class="episode-card-start" id="episode-start-ward">액팅 모드 시작</button>
             </article>
 
-            <article class="episode-card locked" aria-disabled="true">
+            <article class="episode-card active" data-episode-card="gbs">
               <div class="episode-card-top">
                 <span>Episode 03</span>
-                <strong>준비 중</strong>
+                <strong>신규</strong>
               </div>
-              <h2>심정지 환자 대응</h2>
-              <p>반응 확인, Code Blue, CPR, 리듬 판독, 제세동/투약 흐름을 다루는 상급 에피소드로 확장 예정입니다.</p>
+              <h2>GBS 호흡근 악화 감지</h2>
+              <p>상행성 weakness 환자에서 SpO₂만 믿지 않고 VC, EtCO₂, cough/swallow, dysautonomia를 추적합니다.</p>
               <dl>
-                <div><dt>난이도</dt><dd>상급</dd></div>
-                <div><dt>상태</dt><dd>설계 예정</dd></div>
+                <div><dt>난이도</dt><dd>중급-상급</dd></div>
+                <div><dt>장소</dt><dd>신경계 병동 703호</dd></div>
+                <div><dt>목표</dt><dd>호흡부전 전조와 ICU escalation</dd></div>
               </dl>
+              <button type="button" class="episode-card-start" id="episode-start-gbs">GBS 에피소드 시작</button>
             </article>
           </section>
 
@@ -114,7 +116,7 @@
             <h1>KHSIM</h1>
           </div>
           <div class="shift">
-            <span>ACS bedside scenario</span>
+            <span id="scenario-label">ACS bedside scenario</span>
             <button type="button" id="simulation-home">홈</button>
             <strong id="score">Score 50</strong>
           </div>
@@ -337,6 +339,19 @@
         bedsideFillLight.position.set(-0.6, 2.35, 1.65);
         scene.add(bedsideFillLight);
 
+        // Window daylight (side wall, cool natural blue)
+        const windowDaylightFill = new THREE.PointLight(0xc8e4ff, 0.62, 9.0);
+        windowDaylightFill.position.set(3.7, 2.2, -1.4);
+        scene.add(windowDaylightFill);
+
+        // Ceiling fluorescent fills
+        const ceilFluor1 = new THREE.PointLight(0xfff8ee, 0.56, 6.4);
+        ceilFluor1.position.set(-1.0, 3.38, 0.1);
+        scene.add(ceilFluor1);
+        const ceilFluor2 = new THREE.PointLight(0xfff8ee, 0.50, 6.0);
+        ceilFluor2.position.set(1.8, 3.38, 0.3);
+        scene.add(ceilFluor2);
+
         function makeSubtleTexture(kind, base, accent) {
           const canvas = document.createElement("canvas");
           canvas.width = 256;
@@ -346,22 +361,26 @@
           context.fillRect(0, 0, 256, 256);
 
           if (kind === "floor") {
-            context.strokeStyle = accent;
-            context.lineWidth = 1;
-            for (let x = 0; x <= 256; x += 64) {
-              context.beginPath();
-              context.moveTo(x, 0);
-              context.lineTo(x, 256);
-              context.stroke();
+            const tileSize = 32;
+            for (let ty = 0; ty < 256; ty += tileSize) {
+              for (let tx = 0; tx < 256; tx += tileSize) {
+                const shade = 0.92 + Math.random() * 0.12;
+                context.fillStyle = `rgb(${Math.round(188*shade)},${Math.round(205*shade)},${Math.round(212*shade)})`;
+                context.fillRect(tx + 1, ty + 1, tileSize - 2, tileSize - 2);
+                for (let g = 0; g < 16; g++) {
+                  context.fillStyle = `rgba(72,96,108,${Math.random() * 0.06})`;
+                  context.fillRect(tx + 1 + Math.random() * (tileSize - 2), ty + 1 + Math.random() * (tileSize - 2), 1, 1);
+                }
+              }
             }
-            for (let y = 0; y <= 256; y += 64) {
-              context.beginPath();
-              context.moveTo(0, y);
-              context.lineTo(256, y);
-              context.stroke();
+            context.strokeStyle = "rgba(140,162,172,0.58)";
+            context.lineWidth = 1.8;
+            for (let x = 0; x <= 256; x += tileSize) {
+              context.beginPath(); context.moveTo(x, 0); context.lineTo(x, 256); context.stroke();
             }
-            context.fillStyle = "rgba(255,255,255,0.07)";
-            for (let i = 0; i < 180; i += 1) context.fillRect(Math.random() * 256, Math.random() * 256, 1, 1);
+            for (let y = 0; y <= 256; y += tileSize) {
+              context.beginPath(); context.moveTo(0, y); context.lineTo(256, y); context.stroke();
+            }
           }
 
           if (kind === "wall") {
@@ -392,8 +411,8 @@
           return texture;
         }
 
-        const floorTexture = makeSubtleTexture("floor", "#cbd9de", "rgba(90,112,122,0.11)");
-        floorTexture.repeat.set(4, 3);
+        const floorTexture = makeSubtleTexture("floor", "#becdd4", "rgba(90,112,122,0.11)");
+        floorTexture.repeat.set(7, 5.2);
         const wallTexture = makeSubtleTexture("wall", "#f5f8f8", "rgba(80,102,112,0.045)");
         wallTexture.repeat.set(2, 1);
         const sheetTexture = makeSubtleTexture("fabric", "#eef5f7", "rgba(160,178,186,0.08)");
@@ -425,7 +444,7 @@
 
         const floor = new THREE.Mesh(
           new THREE.PlaneGeometry(12, 9),
-          new THREE.MeshStandardMaterial({ color: 0xd7e3e6, map: floorTexture, roughness: 0.88, metalness: 0.02 }),
+          new THREE.MeshStandardMaterial({ color: 0xdae7eb, map: floorTexture, roughness: 0.78, metalness: 0.07 }),
         );
         floor.rotation.x = -Math.PI / 2;
         floor.receiveShadow = true;
@@ -446,6 +465,45 @@
         sideWall.position.set(4.05, 2.25, 0.8);
         sideWall.receiveShadow = true;
         scene.add(sideWall);
+
+        // Left wall (far side, enclosing the room)
+        const leftWallMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 4.5, 9),
+          new THREE.MeshStandardMaterial({ color: 0xeef3f0, map: wallTexture, roughness: 0.84 }),
+        );
+        leftWallMesh.position.set(-5.58, 2.25, 0.8);
+        leftWallMesh.receiveShadow = true;
+        scene.add(leftWallMesh);
+
+        // Wainscoting – hospital lower-wall panel (~1.08 m high)
+        const wainscotMat = new THREE.MeshStandardMaterial({ color: 0xcedae0, roughness: 0.72 });
+        const railCapMat  = new THREE.MeshStandardMaterial({ color: 0x96b0ba, roughness: 0.50, metalness: 0.10 });
+
+        const backWainscot = new THREE.Mesh(new THREE.BoxGeometry(12, 1.08, 0.134), wainscotMat);
+        backWainscot.position.set(0, 0.54, -3.168);
+        backWainscot.receiveShadow = true;
+        scene.add(backWainscot);
+
+        const sideWainscot = new THREE.Mesh(new THREE.BoxGeometry(0.134, 1.08, 9), wainscotMat);
+        sideWainscot.position.set(4.022, 0.54, 0.72);
+        sideWainscot.receiveShadow = true;
+        scene.add(sideWainscot);
+
+        const leftWainscot = new THREE.Mesh(new THREE.BoxGeometry(0.134, 1.08, 9), wainscotMat);
+        leftWainscot.position.set(-5.552, 0.54, 0.72);
+        leftWainscot.receiveShadow = true;
+        scene.add(leftWainscot);
+
+        // Cap rail (accent strip at top of wainscoting)
+        const backCapRail = new THREE.Mesh(new THREE.BoxGeometry(12, 0.035, 0.148), railCapMat);
+        backCapRail.position.set(0, 1.10, -3.154);
+        scene.add(backCapRail);
+        const sideCapRail = new THREE.Mesh(new THREE.BoxGeometry(0.148, 0.035, 9), railCapMat);
+        sideCapRail.position.set(4.012, 1.10, 0.72);
+        scene.add(sideCapRail);
+        const leftCapRail = new THREE.Mesh(new THREE.BoxGeometry(0.148, 0.035, 9), railCapMat);
+        leftCapRail.position.set(-5.542, 1.10, 0.72);
+        scene.add(leftCapRail);
 
         const headwallPanel = roundedBox(2.45, 0.32, 0.065, 0.035, new THREE.MeshStandardMaterial({ color: 0xf3f5f2, roughness: 0.58 }));
         headwallPanel.position.set(-0.55, 1.94, -3.11);
@@ -470,6 +528,142 @@
         const sideBaseboard = roundedBox(0.055, 0.12, 8.2, 0.018, baseboardMaterial);
         sideBaseboard.position.set(3.98, 0.42, 0.72);
         scene.add(sideBaseboard);
+
+        // Left wall baseboard
+        const leftBaseboard = roundedBox(0.055, 0.12, 8.2, 0.018, baseboardMaterial);
+        leftBaseboard.position.set(-5.52, 0.42, 0.72);
+        scene.add(leftBaseboard);
+
+        // ── CEILING ────────────────────────────────────────────────────────────
+        function makeCeilingTileTexture() {
+          const cv = document.createElement("canvas");
+          cv.width = 512; cv.height = 512;
+          const cx2 = cv.getContext("2d");
+          cx2.fillStyle = "#f4f8f8";
+          cx2.fillRect(0, 0, 512, 512);
+          cx2.strokeStyle = "rgba(162,178,185,0.36)";
+          cx2.lineWidth = 2.4;
+          for (let i = 0; i <= 512; i += 128) {
+            cx2.beginPath(); cx2.moveTo(i, 0); cx2.lineTo(i, 512); cx2.stroke();
+            cx2.beginPath(); cx2.moveTo(0, i); cx2.lineTo(512, i); cx2.stroke();
+          }
+          for (let i = 0; i < 260; i++) {
+            cx2.fillStyle = `rgba(120,142,150,${Math.random() * 0.042})`;
+            cx2.fillRect(Math.random() * 512, Math.random() * 512, 1, 1);
+          }
+          const t = new THREE.CanvasTexture(cv);
+          t.colorSpace = THREE.SRGBColorSpace;
+          t.wrapS = t.wrapT = THREE.RepeatWrapping;
+          return t;
+        }
+        const ceilingTileTexture = makeCeilingTileTexture();
+        ceilingTileTexture.repeat.set(3, 2.25);
+        const ceilingMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(12, 9),
+          new THREE.MeshStandardMaterial({ color: 0xf2f7f7, map: ceilingTileTexture, roughness: 0.94 }),
+        );
+        ceilingMesh.rotation.x = Math.PI / 2;
+        ceilingMesh.position.set(0, 3.62, 0.8);
+        ceilingMesh.receiveShadow = true;
+        scene.add(ceilingMesh);
+
+        // Fluorescent ceiling light fixtures
+        const fluorescentGlowMat  = new THREE.MeshBasicMaterial({ color: 0xfffef0, transparent: true, opacity: 0.88 });
+        const fluorescentFrameMat = new THREE.MeshStandardMaterial({ color: 0xd6e0e4, roughness: 0.56 });
+        [[-1.1, 0.15], [1.65, 0.15]].forEach(([fx, fz]) => {
+          const glowPanel = new THREE.Mesh(new THREE.PlaneGeometry(1.68, 0.36), fluorescentGlowMat);
+          glowPanel.rotation.x = Math.PI / 2;
+          glowPanel.position.set(fx, 3.612, fz);
+          scene.add(glowPanel);
+          const frame = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.042, 0.44), fluorescentFrameMat);
+          frame.position.set(fx, 3.602, fz);
+          scene.add(frame);
+          [-0.11, 0.11].forEach((tz) => {
+            const tube = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.013, 0.013, 1.55, 10),
+              new THREE.MeshBasicMaterial({ color: 0xfffde8, transparent: true, opacity: 0.72 }),
+            );
+            tube.rotation.z = Math.PI / 2;
+            tube.position.set(fx, 3.598, fz + tz);
+            scene.add(tube);
+          });
+        });
+
+        // ── WINDOW (right / side wall) ─────────────────────────────────────────
+        const windowFrameMat = new THREE.MeshStandardMaterial({ color: 0xf1f6f7, roughness: 0.36, metalness: 0.04 });
+        const windowGlassMat = new THREE.MeshStandardMaterial({
+          color: 0xb4d8f2,
+          roughness: 0.04, metalness: 0.10,
+          transparent: true, opacity: 0.16,
+          side: THREE.DoubleSide,
+        });
+        const winOuterFrame = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.78, 1.24), windowFrameMat);
+        winOuterFrame.position.set(4.00, 2.0, -1.52);
+        winOuterFrame.castShadow = true;
+        scene.add(winOuterFrame);
+        const winGlass = new THREE.Mesh(new THREE.PlaneGeometry(1.06, 1.58), windowGlassMat);
+        winGlass.rotation.y = Math.PI / 2;
+        winGlass.position.set(3.978, 2.0, -1.52);
+        scene.add(winGlass);
+        const winCrossH = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.042, 1.06), windowFrameMat);
+        winCrossH.position.set(4.00, 2.0, -1.52);
+        scene.add(winCrossH);
+        const winCrossV = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.58, 0.042), windowFrameMat);
+        winCrossV.position.set(4.00, 2.0, -1.52);
+        scene.add(winCrossV);
+        const winSill = new THREE.Mesh(
+          new THREE.BoxGeometry(0.25, 0.05, 1.30),
+          new THREE.MeshStandardMaterial({ color: 0xe3ecf0, roughness: 0.42 }),
+        );
+        winSill.position.set(3.94, 1.22, -1.52);
+        scene.add(winSill);
+        // Subtle daylight bloom on floor
+        const winBloom = new THREE.Mesh(
+          new THREE.PlaneGeometry(3.4, 1.8),
+          new THREE.MeshBasicMaterial({ color: 0xc8e4ff, transparent: true, opacity: 0.052, depthWrite: false }),
+        );
+        winBloom.rotation.x = -Math.PI / 2;
+        winBloom.position.set(2.3, 0.012, -1.46);
+        scene.add(winBloom);
+
+        // ── DOOR (back wall, patient-left side) ────────────────────────────────
+        const doorFrameMatD  = new THREE.MeshStandardMaterial({ color: 0xf1f6f8, roughness: 0.50 });
+        const doorPanelMatD  = new THREE.MeshStandardMaterial({ color: 0xe6f0f4, roughness: 0.54 });
+        const doorHandleMatD = new THREE.MeshStandardMaterial({ color: 0xaabcc5, metalness: 0.72, roughness: 0.16 });
+        const doorTopD = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.10, 0.08), doorFrameMatD);
+        doorTopD.position.set(-4.18, 2.45, -3.103);
+        scene.add(doorTopD);
+        [-0.50, 0.50].forEach((dx) => {
+          const dSide = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.45, 0.08), doorFrameMatD);
+          dSide.position.set(-4.18 + dx, 1.225, -3.103);
+          scene.add(dSide);
+        });
+        const doorPanelD = new THREE.Mesh(new THREE.BoxGeometry(0.86, 2.28, 0.048), doorPanelMatD);
+        doorPanelD.position.set(-4.18, 1.14, -3.082);
+        doorPanelD.castShadow = true;
+        scene.add(doorPanelD);
+        const doorInset = roundedBox(0.68, 1.62, 0.016, 0.032, new THREE.MeshStandardMaterial({ color: 0xdbe8ed, roughness: 0.52 }));
+        doorInset.position.set(-4.18, 1.10, -3.056);
+        scene.add(doorInset);
+        const doorHandleD = roundedBox(0.068, 0.016, 0.122, 0.007, doorHandleMatD);
+        doorHandleD.position.set(-3.80, 1.15, -3.054);
+        scene.add(doorHandleD);
+        const doorVisionD = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.20, 0.28),
+          new THREE.MeshBasicMaterial({ color: 0xbeddf0, transparent: true, opacity: 0.42, depthWrite: false }),
+        );
+        doorVisionD.position.set(-4.18, 1.76, -3.058);
+        scene.add(doorVisionD);
+
+        // Light switch panel near door
+        const switchPanelMesh = roundedBox(0.076, 0.118, 0.018, 0.01, new THREE.MeshStandardMaterial({ color: 0xf1f5f7, roughness: 0.48 }));
+        switchPanelMesh.position.set(-3.70, 1.46, -3.052);
+        scene.add(switchPanelMesh);
+        [1.49, 1.43].forEach((sy) => {
+          const swBtn = roundedBox(0.052, 0.038, 0.013, 0.005, new THREE.MeshStandardMaterial({ color: 0xe4eaec, roughness: 0.46 }));
+          swBtn.position.set(-3.70, sy, -3.038);
+          scene.add(swBtn);
+        });
 
         const ceilingPanelMaterial = new THREE.MeshBasicMaterial({ color: 0xfffbf0, transparent: true, opacity: 0.36 });
         const ceilingLightPanel = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), ceilingPanelMaterial);
@@ -520,6 +714,148 @@
         const wasteLid = roundedBox(0.38, 0.045, 0.34, 0.025, new THREE.MeshStandardMaterial({ color: 0x8a9aa3, roughness: 0.44 }));
         wasteLid.position.set(3.15, 0.68, 1.52);
         scene.add(wasteLid);
+
+        // ── BEDSIDE CABINET ───────────────────────────────────────────────────
+        const cabinetFrameMat = new THREE.MeshStandardMaterial({ color: 0xe2ecf0, roughness: 0.62 });
+        const cabinetTopMat   = new THREE.MeshStandardMaterial({ color: 0xcbd7dc, roughness: 0.42, metalness: 0.06 });
+        const cabinetBody = roundedBox(0.50, 0.72, 0.44, 0.034, cabinetFrameMat);
+        cabinetBody.position.set(2.98, 0.52, -0.72);
+        cabinetBody.castShadow = true;
+        cabinetBody.receiveShadow = true;
+        scene.add(cabinetBody);
+        const cabinetTopSurf = roundedBox(0.52, 0.026, 0.46, 0.018, cabinetTopMat);
+        cabinetTopSurf.position.set(2.98, 0.910, -0.72);
+        scene.add(cabinetTopSurf);
+        [0.72, 0.54, 0.36].forEach((y) => {
+          const drawerLine = new THREE.Mesh(
+            new THREE.BoxGeometry(0.44, 0.008, 0.01),
+            new THREE.MeshStandardMaterial({ color: 0xb5c5cc, roughness: 0.5 }),
+          );
+          drawerLine.position.set(2.98, y, -0.497);
+          scene.add(drawerLine);
+        });
+        const cabinetHandle = roundedBox(0.13, 0.014, 0.014, 0.005, new THREE.MeshStandardMaterial({ color: 0x8899a4, metalness: 0.52, roughness: 0.28 }));
+        cabinetHandle.position.set(2.98, 0.64, -0.484);
+        scene.add(cabinetHandle);
+        // Tissue box on top
+        const tissueBox = roundedBox(0.20, 0.10, 0.12, 0.018, new THREE.MeshStandardMaterial({ color: 0xeef4f7, roughness: 0.72 }));
+        tissueBox.position.set(2.98, 0.975, -0.72);
+        scene.add(tissueBox);
+        const tissueSlot = roundedBox(0.12, 0.012, 0.055, 0.008, new THREE.MeshBasicMaterial({ color: 0xcce4ec }));
+        tissueSlot.position.set(2.98, 1.028, -0.72);
+        scene.add(tissueSlot);
+
+        // ── OVERBED TABLE ─────────────────────────────────────────────────────
+        const obMetal  = new THREE.MeshStandardMaterial({ color: 0xc8d4d9, metalness: 0.30, roughness: 0.42 });
+        const obSurfMt = new THREE.MeshStandardMaterial({ color: 0xeef4f6, roughness: 0.44 });
+        // H-base on casters
+        const obBaseA = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.04, 0.11), obMetal);
+        obBaseA.position.set(2.62, 0.058, 0.34);
+        scene.add(obBaseA);
+        const obBaseB = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.04, 0.62), obMetal);
+        obBaseB.position.set(2.62, 0.058, 0.34);
+        scene.add(obBaseB);
+        [[-0.22, 0.22], [0.22, 0.22], [0, -0.12]].forEach(([bx, bz]) => {
+          const caster = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.026, 12), new THREE.MeshStandardMaterial({ color: 0x2e3638, roughness: 0.5 }));
+          caster.position.set(2.62 + bx, 0.022, 0.34 + bz);
+          caster.rotation.z = Math.PI / 2;
+          scene.add(caster);
+        });
+        const obPost = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.96, 12), obMetal);
+        obPost.position.set(2.62, 0.558, 0.34);
+        scene.add(obPost);
+        // Horizontal arm extending over bed
+        const obArm = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.028, 0.055), obMetal);
+        obArm.position.set(2.06, 1.045, 0.34);
+        scene.add(obArm);
+        const obSurface = roundedBox(0.60, 0.028, 0.46, 0.022, obSurfMt);
+        obSurface.position.set(1.50, 1.062, 0.34);
+        obSurface.castShadow = true;
+        scene.add(obSurface);
+        const obLip = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.022, 0.014), new THREE.MeshStandardMaterial({ color: 0xb4c4ca, roughness: 0.5 }));
+        obLip.position.set(1.50, 1.078, 0.12);
+        scene.add(obLip);
+        // Paper cup on table
+        const patCup = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.022, 0.018, 0.078, 12),
+          new THREE.MeshStandardMaterial({ color: 0xeef8fb, roughness: 0.72 }),
+        );
+        patCup.position.set(1.60, 1.104, 0.28);
+        scene.add(patCup);
+
+        // ── VISITOR CHAIR ─────────────────────────────────────────────────────
+        const vChairFabric = new THREE.MeshStandardMaterial({ color: 0x4a7a8a, roughness: 0.84 });
+        const vChairMetal  = new THREE.MeshStandardMaterial({ color: 0xadbec6, metalness: 0.50, roughness: 0.28 });
+        const vSeat = roundedBox(0.47, 0.07, 0.43, 0.048, vChairFabric);
+        vSeat.position.set(3.26, 0.46, 0.82);
+        vSeat.castShadow = true; vSeat.receiveShadow = true;
+        scene.add(vSeat);
+        const vBack = roundedBox(0.45, 0.52, 0.07, 0.04, vChairFabric);
+        vBack.position.set(3.26, 0.76, 0.60);
+        vBack.rotation.x = 0.10;
+        vBack.castShadow = true;
+        scene.add(vBack);
+        [-0.21, 0.21].forEach((dx) => {
+          const arm = roundedBox(0.038, 0.038, 0.34, 0.018, vChairFabric);
+          arm.position.set(3.26 + dx, 0.61, 0.78);
+          scene.add(arm);
+        });
+        [[-0.18, -0.17], [0.18, -0.17], [-0.18, 0.17], [0.18, 0.17]].forEach(([dx, dz]) => {
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.45, 8), vChairMetal);
+          leg.position.set(3.26 + dx, 0.225, 0.82 + dz);
+          leg.castShadow = true;
+          scene.add(leg);
+        });
+
+        // ── PRIVACY CURTAIN TRACK ─────────────────────────────────────────────
+        const ctMat = new THREE.MeshStandardMaterial({ color: 0xbeccd2, metalness: 0.64, roughness: 0.16 });
+        // Foot-side horizontal track
+        const ctFront = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 4.68, 10), ctMat);
+        ctFront.rotation.z = Math.PI / 2;
+        ctFront.position.set(0.10, 3.265, 1.08);
+        scene.add(ctFront);
+        // Side verticals
+        [-2.24, 2.24].forEach((x) => {
+          const ctSide = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 2.46, 10), ctMat);
+          ctSide.position.set(x, 3.265, -0.15);
+          scene.add(ctSide);
+          const cap = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), ctMat);
+          cap.position.set(x, 3.265, 1.08);
+          scene.add(cap);
+        });
+        // Curtain panel (partially drawn, hospital blue-white)
+        const curtainMat = new THREE.MeshStandardMaterial({
+          color: 0xd8eaf2, roughness: 0.92,
+          transparent: true, opacity: 0.40,
+          side: THREE.DoubleSide,
+        });
+        const curtainPanel = new THREE.Mesh(new THREE.PlaneGeometry(2.85, 2.22), curtainMat);
+        curtainPanel.position.set(-1.32, 2.155, 1.072);
+        scene.add(curtainPanel);
+        // Curtain hooks
+        for (let i = 0; i < 7; i++) {
+          const hook = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.004, 6, 12), ctMat);
+          hook.position.set(-2.20 + i * 0.50, 3.258, 1.072);
+          hook.rotation.x = Math.PI / 2;
+          scene.add(hook);
+        }
+
+        // ── EMERGENCY CALL BUTTON ─────────────────────────────────────────────
+        const callBtnMat = new THREE.MeshStandardMaterial({ color: 0xd42e2e, roughness: 0.38, metalness: 0.04 });
+        const callBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.016, 16), callBtnMat);
+        callBtn.rotation.x = Math.PI / 2;
+        callBtn.position.set(-1.22, 1.97, -3.038);
+        scene.add(callBtn);
+        const callBtnRing = new THREE.Mesh(
+          new THREE.TorusGeometry(0.037, 0.007, 8, 20),
+          new THREE.MeshStandardMaterial({ color: 0x780000, roughness: 0.42 }),
+        );
+        callBtnRing.rotation.x = Math.PI / 2;
+        callBtnRing.position.set(-1.22, 1.97, -3.030);
+        scene.add(callBtnRing);
+        const callBtnLabel = roundedBox(0.064, 0.022, 0.018, 0.006, new THREE.MeshBasicMaterial({ color: 0xffeaea }));
+        callBtnLabel.position.set(-1.22, 1.89, -3.034);
+        scene.add(callBtnLabel);
 
         const normalBedColor = new THREE.Color(0x8fa9b6);
         const painAlertBedColor = new THREE.Color(0xd94b43);
@@ -588,6 +924,19 @@
         pillowIndent.rotation.x = -Math.PI / 2;
         pillowIndent.scale.set(1.18, 0.62, 1);
         scene.add(pillowIndent);
+
+        const headElevationWedge = roundedBox(
+          1.28,
+          0.13,
+          0.92,
+          0.08,
+          new THREE.MeshStandardMaterial({ color: 0xe7f0f3, map: sheetTexture, roughness: 0.9 }),
+        );
+        headElevationWedge.position.set(-1.34, 1.2, -0.35);
+        headElevationWedge.rotation.z = -0.22;
+        headElevationWedge.visible = false;
+        headElevationWedge.castShadow = true;
+        scene.add(headElevationWedge);
 
         let currentPain = 0;
         let latestVitals = null;
@@ -696,6 +1045,8 @@
           communication: "의사 연락: SBAR",
           charge: "차지 간호사: 보고와 최신 상태 업데이트",
           iv: "IV 라인: patency와 수액 준비",
+          wallOxygen: "벽 산소: flowmeter와 O2 라인 연결",
+          wallSuction: "벽 석션: 흡인 압력과 canister 준비",
           scenePan: "화면을 드래그해 병실 시야를 이동합니다.",
         };
         const hotspotMaterial = new THREE.MeshBasicMaterial({
@@ -710,6 +1061,24 @@
           interactiveObjects.push(mesh);
           return mesh;
         }
+
+        const outletRingMaterial = new THREE.MeshBasicMaterial({
+          color: 0x0f8f8f,
+          transparent: true,
+          opacity: 0.18,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        const oxygenOutletHotspot = new THREE.Mesh(new THREE.RingGeometry(0.085, 0.16, 28), outletRingMaterial.clone());
+        oxygenOutletHotspot.position.set(0.2, 1.92, -3.015);
+        scene.add(oxygenOutletHotspot);
+        const suctionOutletHotspot = new THREE.Mesh(new THREE.RingGeometry(0.085, 0.16, 28), outletRingMaterial.clone());
+        suctionOutletHotspot.position.set(0.52, 1.92, -3.015);
+        scene.add(suctionOutletHotspot);
+        registerInteractive(oxygenOutlet, "wallOxygen");
+        registerInteractive(oxygenOutletHotspot, "wallOxygen");
+        registerInteractive(suctionOutlet, "wallSuction");
+        registerInteractive(suctionOutletHotspot, "wallSuction");
 
         function makeTube(points, color, radius = 0.012, opacity = 1) {
           const saggedPoints = [];
@@ -1403,6 +1772,11 @@
           const oxygenVisible = Boolean(nextState?.oxygenApplied);
           oxygenMask.material.opacity = oxygenVisible ? 0.34 : 0.0;
           oxygenTube.material.opacity = oxygenVisible ? 0.58 : 0.0;
+          const headUpVisible = Boolean(nextState?.gbsWorkflow?.headOfBedRaised);
+          headElevationWedge.visible = headUpVisible;
+          pillow.position.y = headUpVisible ? 1.37 : 1.31;
+          pillow.rotation.z = headUpVisible ? -0.18 : -0.08;
+          pillowIndent.position.y = headUpVisible ? 1.45 : 1.39;
 
           const leadsVisible = Boolean(nextState?.monitorOn || nextState?.ekgAttached);
           ecgPads.forEach((pad) => {
@@ -1422,15 +1796,20 @@
 
           if (chargeNurseGroup) {
             const ward = nextState?.wardWorkflow;
-            const visible = Boolean(nextState?.currentEpisode === "wardWorkflow" && ward?.chargeAtBedside);
+            const gbs = nextState?.gbsWorkflow;
+            const visible = Boolean(
+              (nextState?.currentEpisode === "wardWorkflow" && ward?.chargeAtBedside) ||
+              (nextState?.currentEpisode === "gbsRespiratory" && gbs?.chargeAtBedside),
+            );
             chargeNurseGroup.visible = visible;
             if (visible) {
               const phoneHand = chargeNurseGroup.getObjectByName("charge-phone-hand");
               const head = chargeNurseGroup.getObjectByName("charge-head");
               const breathe = Math.sin(performance.now() * 0.0025) * 0.012;
               chargeNurseGroup.position.y = breathe;
-              if (phoneHand) phoneHand.rotation.z = ward?.notifyingDoctor ? -0.72 : -0.38;
-              if (head) head.rotation.z = ward?.notifyingDoctor ? -0.08 : 0.03;
+              const notifying = Boolean(ward?.notifyingDoctor || gbs?.icuEscalated);
+              if (phoneHand) phoneHand.rotation.z = notifying ? -0.72 : -0.38;
+              if (head) head.rotation.z = notifying ? -0.08 : 0.03;
             }
           }
         };
@@ -1504,6 +1883,50 @@
         ivHotspot.rotation.x = -Math.PI / 2;
         scene.add(ivHotspot);
         registerInteractive(ivHotspot, "iv");
+
+        // ── IV PUMP (clamped to pole) ──────────────────────────────────────────
+        const ivPumpBodyMat = new THREE.MeshStandardMaterial({ color: 0xdae8ec, roughness: 0.50 });
+        const ivPumpBody = roundedBox(0.172, 0.265, 0.132, 0.022, ivPumpBodyMat);
+        ivPumpBody.position.set(1.9, 1.89, 0.92);
+        ivPumpBody.castShadow = true;
+        scene.add(ivPumpBody);
+        registerInteractive(ivPumpBody, "iv");
+        // Pump screen
+        const ivPumpScreen = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.094, 0.058),
+          new THREE.MeshBasicMaterial({ color: 0x081e25 }),
+        );
+        ivPumpScreen.rotation.y = Math.PI / 2;
+        ivPumpScreen.position.set(1.968, 1.915, 0.92);
+        scene.add(ivPumpScreen);
+        // Rate readout glow (green, like real Alaris pump)
+        const pumpGlow = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.070, 0.038),
+          new THREE.MeshBasicMaterial({ color: 0x38e89a, transparent: true, opacity: 0.75 }),
+        );
+        pumpGlow.rotation.y = Math.PI / 2;
+        pumpGlow.position.set(1.969, 1.917, 0.92);
+        scene.add(pumpGlow);
+        // Accent stripe
+        const pumpAccent = roundedBox(0.022, 0.248, 0.022, 0.009, new THREE.MeshStandardMaterial({ color: 0x147d7e, roughness: 0.36 }));
+        pumpAccent.position.set(1.963, 1.89, 0.92);
+        scene.add(pumpAccent);
+        // Button row
+        [1.80, 1.86, 1.92].forEach((py) => {
+          const pBtn = roundedBox(0.024, 0.018, 0.013, 0.005, new THREE.MeshStandardMaterial({ color: 0x8aaab3, roughness: 0.42 }));
+          pBtn.rotation.y = Math.PI / 2;
+          pBtn.position.set(1.966, py, 0.955);
+          scene.add(pBtn);
+        });
+        // Clamp collar on pole
+        const pumpClamp = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.026, 0.026, 0.046, 14),
+          new THREE.MeshStandardMaterial({ color: 0xadbec6, metalness: 0.48, roughness: 0.24 }),
+        );
+        pumpClamp.position.set(1.9, 1.89, 0.94);
+        scene.add(pumpClamp);
+        // Drip tube from bag to pump
+        makeTube([[1.9, 2.27, 0.92], [1.9, 2.02, 0.92]], 0xe9fbff, 0.0055, 0.46);
 
         const monitorCanvas = document.createElement("canvas");
         monitorCanvas.width = 512;
@@ -2146,6 +2569,6 @@
         }
       }
     </script>
-    <script src="./script.js?v=prototype4-ward11"></script>
+    <script src="./script.js?v=prototype4-gbs6"></script>
   </body>
 </html>
