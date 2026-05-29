@@ -1835,6 +1835,70 @@ body.emr-open {
   display: none;
 }
 
+/* ─── EMR Float Panel (GBS bedside mode) ──────── */
+.emr-drag-handle {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 12px;
+  background: #17313f;
+  color: #93bfcf;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-radius: 10px 10px 0 0;
+  cursor: grab;
+  user-select: none;
+}
+
+.emr-drag-icon {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.emr-drag-hint {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.45;
+}
+
+.emr-modal.emr-float {
+  inset: auto;
+  left: 16px;
+  top: 72px;
+  width: 430px;
+  max-height: calc(100vh - 88px);
+  padding: 0;
+  background: transparent;
+  z-index: 30;
+  border-radius: 10px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.emr-modal.emr-float .emr-drag-handle {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.emr-modal.emr-float .emr-shell {
+  width: 430px;
+  max-height: calc(100vh - 88px - 36px); /* subtract drag handle */
+  border-radius: 0 0 10px 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Body state when float panel is open — do NOT lock scroll or block canvas */
+body.emr-float-open .ward,
+body.emr-float-open #three-container,
+body.emr-float-open canvas {
+  pointer-events: auto !important;
+}
+
 .emr-shell {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -3309,7 +3373,7 @@ body.clinical-entry-active .workflow-hud {
   position: absolute;
   left: 18px;
   top: 92px;
-  z-index: 9;
+  z-index: 35; /* above float EMR panel (30) so actions stay accessible */
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: min(380px, calc(100% - 36px));

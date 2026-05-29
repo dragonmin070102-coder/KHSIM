@@ -3960,14 +3960,32 @@ function openEmr(tab = "summary") {
   }
 
   renderEmr();
+
+  // Float panel mode: GBS bedside gameplay (not mandatory chart review step)
+  const useFloat = isGbsEpisode() && state.stage !== "chartReview";
+  if (useFloat) {
+    if (firstOpen) {
+      // Reset drag position to CSS default on each new episode session
+      emrModalEl.style.left = "";
+      emrModalEl.style.top = "";
+    }
+    emrModalEl.classList.add("emr-float");
+    document.body.classList.add("emr-float-open");
+    document.body.classList.remove("emr-open");
+  } else {
+    emrModalEl.classList.remove("emr-float");
+    document.body.classList.remove("emr-float-open");
+    document.body.classList.add("emr-open");
+  }
+
   emrModalEl.hidden = false;
-  document.body.classList.add("emr-open");
 }
 
 function closeEmr() {
   if (!emrModalEl) return;
   emrModalEl.hidden = true;
-  document.body.classList.remove("emr-open");
+  emrModalEl.classList.remove("emr-float");
+  document.body.classList.remove("emr-open", "emr-float-open");
   releaseBedsideFromEntry();
 }
 
@@ -4233,6 +4251,35 @@ emrCloseEl?.addEventListener("click", closeEmr);
 emrTabButtons.forEach((button) => {
   button.addEventListener("click", () => setEmrTab(button.dataset.emrTab));
 });
+
+// EMR float panel drag-to-move
+(function () {
+  const dragHandle = document.getElementById("emr-drag-handle");
+  if (!dragHandle || !emrModalEl) return;
+  let active = false;
+  let ox = 0, oy = 0;
+  dragHandle.addEventListener("pointerdown", (e) => {
+    if (!emrModalEl.classList.contains("emr-float")) return;
+    active = true;
+    const r = emrModalEl.getBoundingClientRect();
+    ox = e.clientX - r.left;
+    oy = e.clientY - r.top;
+    dragHandle.style.cursor = "grabbing";
+    dragHandle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  dragHandle.addEventListener("pointermove", (e) => {
+    if (!active) return;
+    const x = Math.max(0, Math.min(window.innerWidth - 430, e.clientX - ox));
+    const y = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - oy));
+    emrModalEl.style.left = x + "px";
+    emrModalEl.style.top  = y + "px";
+  });
+  dragHandle.addEventListener("pointerup", () => {
+    active = false;
+    dragHandle.style.cursor = "grab";
+  });
+}());
 emrContentEl?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-emr-action]");
   if (!button) return;
