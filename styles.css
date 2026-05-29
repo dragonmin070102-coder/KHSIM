@@ -542,6 +542,29 @@ h1 {
   z-index: 0;
 }
 
+.three-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  padding: 28px;
+  background: linear-gradient(135deg, #dce8ec, #eef5f6);
+  color: #24323c;
+  text-align: center;
+}
+
+.three-fallback strong {
+  font-size: 18px;
+}
+
+.three-fallback span {
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
 #three-container canvas {
   display: block;
   width: 100%;
@@ -1976,6 +1999,153 @@ body.emr-open {
 .emr-table tr.alert td:last-child {
   color: var(--red);
   font-weight: 900;
+}
+
+.abga-card {
+  margin-top: 14px;
+}
+
+.abga-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.abga-card-header h3 {
+  margin-bottom: 4px;
+}
+
+.abga-card-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.abga-time {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid rgba(20, 125, 126, 0.24);
+  border-radius: 999px;
+  background: #eef9f8;
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.abga-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  font-size: 13px;
+}
+
+.abga-table th,
+.abga-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.abga-table th {
+  background: #edf5f6;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.abga-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.abga-table td {
+  color: #2d3d48;
+  font-weight: 800;
+}
+
+.abga-table td:first-child strong {
+  color: #24323c;
+}
+
+.abga-table .abga-value {
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.abga-table tr.high {
+  background: #fff2f1;
+}
+
+.abga-table tr.high .abga-value,
+.abga-table tr.high .abga-flag {
+  color: var(--red);
+}
+
+.abga-table tr.low {
+  background: #eef5fd;
+}
+
+.abga-table tr.low .abga-value,
+.abga-table tr.low .abga-flag {
+  color: #2f6fbb;
+}
+
+.abga-table tr.normal {
+  background: #f7fbf9;
+}
+
+.abga-table tr.normal .abga-value,
+.abga-table tr.normal .abga-flag {
+  color: var(--green);
+}
+
+.abga-flag {
+  display: inline-flex;
+  min-width: 44px;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.64);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.abga-legend {
+  display: flex;
+  gap: 9px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.abga-legend span {
+  padding: 5px 8px;
+  border-radius: 999px;
+}
+
+.abga-legend-low {
+  background: #eef5fd;
+  color: #2f6fbb;
+}
+
+.abga-legend-normal {
+  background: #f1faf6;
+  color: var(--green);
+}
+
+.abga-legend-high {
+  background: #fff2f1;
+  color: var(--red);
 }
 
 .emr-list {
@@ -3723,6 +3893,13 @@ body.clinical-entry-active .workflow-hud {
   stroke-width: 2.8;
   filter: drop-shadow(0 0 4px rgba(255, 209, 102, 0.56));
   animation-duration: 3.1s;
+}
+
+.device-wave-row.co2 polyline {
+  stroke: #f5c542;
+  stroke-width: 3.1;
+  filter: drop-shadow(0 0 5px rgba(245, 197, 66, 0.64));
+  animation-duration: 2.35s;
 }
 
 @keyframes monitorTrace {

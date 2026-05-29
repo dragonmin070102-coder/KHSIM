@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>KHSIM</title>
-    <link rel="stylesheet" href="./styles.css?v=prototype4-gbs6" />
+    <link rel="stylesheet" href="./styles.css?v=prototype4-gbs16" />
   </head>
   <body class="title-active">
     <section class="title-screen" id="title-screen" aria-labelledby="title-screen-title">
@@ -65,14 +65,14 @@
                 <span>Episode 02</span>
                 <strong>신규 모드</strong>
               </div>
-              <h2>Ward Workflow – Acting Nurse Mode</h2>
-              <p>신규 병동 액팅 간호사 역할로 subtle warning을 발견하고, 차지에게 보고한 뒤 노티 중 bedside 행동을 이어갑니다.</p>
+              <h2>급성 흉통 환자 간호 - 액팅 간호사 모드</h2>
+              <p>신규 병동 액팅 간호사 역할로 흉통 환자의 이상징후를 발견하고, 차지에게 보고한 뒤 노티 중 bedside 행동을 이어갑니다.</p>
               <dl>
                 <div><dt>난이도</dt><dd>중급</dd></div>
                 <div><dt>장소</dt><dd>한국 병동 601호</dd></div>
                 <div><dt>목표</dt><dd>역할 분담과 지속 재사정</dd></div>
               </dl>
-              <button type="button" class="episode-card-start" id="episode-start-ward">액팅 모드 시작</button>
+              <button type="button" class="episode-card-start" id="episode-start-ward">흉통 액팅 모드 시작</button>
             </article>
 
             <article class="episode-card active" data-episode-card="gbs">
@@ -80,14 +80,14 @@
                 <span>Episode 03</span>
                 <strong>신규</strong>
               </div>
-              <h2>GBS 호흡근 악화 감지</h2>
-              <p>상행성 weakness 환자에서 SpO₂만 믿지 않고 VC, EtCO₂, cough/swallow, dysautonomia를 추적합니다.</p>
+              <h2>GBS 호흡근 악화 감지 - SpO₂ 함정</h2>
+              <p>SpO₂가 정상처럼 보여도 짧은 문장, weak cough, VC 하락, EtCO₂ 상승을 묶어 호흡근 악화를 잡아냅니다.</p>
               <dl>
                 <div><dt>난이도</dt><dd>중급-상급</dd></div>
                 <div><dt>장소</dt><dd>신경계 병동 703호</dd></div>
-                <div><dt>목표</dt><dd>호흡부전 전조와 ICU escalation</dd></div>
+                <div><dt>목표</dt><dd>산소화보다 환기 저하 먼저 감지</dd></div>
               </dl>
-              <button type="button" class="episode-card-start" id="episode-start-gbs">GBS 에피소드 시작</button>
+              <button type="button" class="episode-card-start" id="episode-start-gbs">GBS SpO₂ 함정 시작</button>
             </article>
           </section>
 
@@ -277,9 +277,10 @@
         scene.background = new THREE.Color(0xdce8ec);
 
         const camera = new THREE.PerspectiveCamera(39, 1, 0.1, 100);
-        const baseCameraPosition = new THREE.Vector3(3.45, 2.35, 4.35);
-        const baseCameraTarget = new THREE.Vector3(0.05, 1.18, -0.32);
+        const baseCameraPosition = new THREE.Vector3(3.42, 2.32, 4.18);
+        const baseCameraTarget = new THREE.Vector3(-0.72, 1.2, -1.58);
         const cameraPan = new THREE.Vector2(0, 0);
+        let cameraZoom = 0;
         const pointerDragState = {
           active: false,
           pointerId: null,
@@ -293,7 +294,19 @@
         camera.position.copy(baseCameraPosition);
         camera.lookAt(baseCameraTarget);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        let renderer;
+        try {
+          renderer = new THREE.WebGLRenderer({ antialias: true });
+        } catch (error) {
+          console.error("KHSIM WebGL renderer failed to initialize", error);
+          container.innerHTML = `
+            <div class="three-fallback">
+              <strong>3D 병실 렌더링을 시작하지 못했습니다.</strong>
+              <span>KHSIM 탭을 여러 개 열어둔 경우 WebGL 컨텍스트가 부족할 수 있습니다. 기존 KHSIM 탭을 닫고 http://127.0.0.1:5302/ 로 다시 열어주세요.</span>
+            </div>
+          `;
+          throw error;
+        }
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -332,7 +345,7 @@
         scene.add(clinicalLight);
 
         const monitorGlowLight = new THREE.PointLight(0x40f39d, 0.0, 3.1);
-        monitorGlowLight.position.set(-2.34, 1.72, -0.86);
+        monitorGlowLight.position.set(-1.92, 1.78, -2.24);
         scene.add(monitorGlowLight);
 
         const bedsideFillLight = new THREE.PointLight(0xb7dcff, 0.08, 4.2);
@@ -659,42 +672,152 @@
           });
         });
 
-        // ── WINDOW (right / side wall) ─────────────────────────────────────────
+        // ── LARGE PATIENT-ROOM WINDOW (right / side wall) ──────────────────────
         const windowFrameMat = new THREE.MeshStandardMaterial({ color: 0xf1f6f7, roughness: 0.36, metalness: 0.04 });
         const windowGlassMat = new THREE.MeshStandardMaterial({
-          color: 0xb4d8f2,
-          roughness: 0.04, metalness: 0.10,
-          transparent: true, opacity: 0.16,
+          color: 0xbadcf0,
+          roughness: 0.03, metalness: 0.08,
+          transparent: true, opacity: 0.18,
           side: THREE.DoubleSide,
         });
-        const winOuterFrame = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.78, 1.24), windowFrameMat);
-        winOuterFrame.position.set(4.00, 2.0, -1.52);
-        winOuterFrame.castShadow = true;
-        scene.add(winOuterFrame);
-        const winGlass = new THREE.Mesh(new THREE.PlaneGeometry(1.06, 1.58), windowGlassMat);
+        function makeExteriorViewMaterial() {
+          const canvas = document.createElement("canvas");
+          canvas.width = 512;
+          canvas.height = 512;
+          const ctx = canvas.getContext("2d");
+          const sky = ctx.createLinearGradient(0, 0, 0, 512);
+          sky.addColorStop(0, "#c9e8f7");
+          sky.addColorStop(0.56, "#8fbdd6");
+          sky.addColorStop(1, "#66828d");
+          ctx.fillStyle = sky;
+          ctx.fillRect(0, 0, 512, 512);
+          ctx.fillStyle = "rgba(255,255,255,0.34)";
+          ctx.beginPath();
+          ctx.ellipse(135, 96, 128, 28, -0.1, 0, Math.PI * 2);
+          ctx.ellipse(365, 122, 152, 34, 0.04, 0, Math.PI * 2);
+          ctx.fill();
+          [
+            { x: 44, y: 190, w: 116, h: 260, c: "rgba(82,102,114,0.62)" },
+            { x: 184, y: 154, w: 92, h: 310, c: "rgba(96,115,126,0.54)" },
+            { x: 310, y: 210, w: 142, h: 250, c: "rgba(70,92,105,0.48)" },
+          ].forEach((b) => {
+            ctx.fillStyle = b.c;
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+            ctx.fillStyle = "rgba(238,248,252,0.28)";
+            for (let yy = b.y + 24; yy < b.y + b.h - 20; yy += 36) {
+              for (let xx = b.x + 18; xx < b.x + b.w - 18; xx += 32) {
+                ctx.fillRect(xx, yy, 14, 10);
+              }
+            }
+          });
+          ctx.fillStyle = "rgba(216,232,237,0.42)";
+          ctx.fillRect(0, 434, 512, 78);
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          return new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
+        }
+        const exteriorViewMat = makeExteriorViewMaterial();
+        const windowX = 3.965;
+        const windowY = 2.12;
+        const windowZ = 1.02;
+        const windowHeight = 2.34;
+        const windowWidth = 3.35;
+        const exteriorSky = new THREE.Mesh(new THREE.PlaneGeometry(windowWidth * 0.98, windowHeight * 0.94), exteriorViewMat.clone());
+        exteriorSky.rotation.y = Math.PI / 2;
+        exteriorSky.position.set(3.955, windowY + 0.03, windowZ);
+        scene.add(exteriorSky);
+
+        const exteriorBuildingMat = new THREE.MeshBasicMaterial({ color: 0x9fb1b9, transparent: true, opacity: 0.36, depthWrite: false });
+        [-0.9, 0.1, 1.05].forEach((offset, index) => {
+          const building = new THREE.Mesh(new THREE.PlaneGeometry(0.58 + index * 0.16, 1.72 - index * 0.18), exteriorBuildingMat);
+          building.rotation.y = Math.PI / 2;
+          building.position.set(4.028, 1.63 + index * 0.08, windowZ + offset);
+          scene.add(building);
+          for (let row = 0; row < 4; row++) {
+            for (let col = 0; col < 2; col++) {
+              const litWindow = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.075, 0.052),
+                new THREE.MeshBasicMaterial({ color: 0xeef6fb, transparent: true, opacity: 0.22, depthWrite: false }),
+              );
+              litWindow.rotation.y = Math.PI / 2;
+              litWindow.position.set(4.023, 1.02 + row * 0.25 + index * 0.05, windowZ + offset - 0.13 + col * 0.22);
+              scene.add(litWindow);
+            }
+          }
+        });
+
+        const winGlass = new THREE.Mesh(new THREE.PlaneGeometry(windowWidth, windowHeight), windowGlassMat);
         winGlass.rotation.y = Math.PI / 2;
-        winGlass.position.set(3.978, 2.0, -1.52);
+        winGlass.position.set(windowX, windowY, windowZ);
         scene.add(winGlass);
-        const winCrossH = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.042, 1.06), windowFrameMat);
-        winCrossH.position.set(4.00, 2.0, -1.52);
-        scene.add(winCrossH);
-        const winCrossV = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.58, 0.042), windowFrameMat);
-        winCrossV.position.set(4.00, 2.0, -1.52);
-        scene.add(winCrossV);
+
+        [
+          [0, windowHeight / 2 + 0.045, 0, 0.13, 0.07, windowWidth + 0.16],
+          [0, -windowHeight / 2 - 0.045, 0, 0.13, 0.07, windowWidth + 0.16],
+          [0, 0, -windowWidth / 2 - 0.045, 0.13, windowHeight + 0.16, 0.07],
+          [0, 0, windowWidth / 2 + 0.045, 0.13, windowHeight + 0.16, 0.07],
+        ].forEach(([dx, dy, dz, sx, sy, sz]) => {
+          const framePart = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), windowFrameMat);
+          framePart.position.set(windowX + dx, windowY + dy, windowZ + dz);
+          framePart.castShadow = true;
+          scene.add(framePart);
+        });
+
         const winSill = new THREE.Mesh(
-          new THREE.BoxGeometry(0.25, 0.05, 1.30),
+          new THREE.BoxGeometry(0.26, 0.06, windowWidth + 0.24),
           new THREE.MeshStandardMaterial({ color: 0xe3ecf0, roughness: 0.42 }),
         );
-        winSill.position.set(3.94, 1.22, -1.52);
+        winSill.position.set(3.92, 0.92, windowZ);
         scene.add(winSill);
         // Subtle daylight bloom on floor
         const winBloom = new THREE.Mesh(
-          new THREE.PlaneGeometry(3.4, 1.8),
-          new THREE.MeshBasicMaterial({ color: 0xc8e4ff, transparent: true, opacity: 0.052, depthWrite: false }),
+          new THREE.PlaneGeometry(4.6, 2.3),
+          new THREE.MeshBasicMaterial({ color: 0xc8e4ff, transparent: true, opacity: 0.066, depthWrite: false }),
         );
         winBloom.rotation.x = -Math.PI / 2;
-        winBloom.position.set(2.3, 0.012, -1.46);
+        winBloom.position.set(2.2, 0.012, 0.86);
         scene.add(winBloom);
+
+        // Visible side window in the default bedside camera view.
+        const leftWindowX = -5.42;
+        const leftWindowY = 2.08;
+        const leftWindowZ = 0.18;
+        const leftWindowHeight = 2.22;
+        const leftWindowWidth = 2.75;
+        const leftExteriorSky = new THREE.Mesh(new THREE.PlaneGeometry(leftWindowWidth * 0.98, leftWindowHeight * 0.94), exteriorViewMat.clone());
+        leftExteriorSky.rotation.y = Math.PI / 2;
+        leftExteriorSky.position.set(-5.415, leftWindowY + 0.02, leftWindowZ);
+        scene.add(leftExteriorSky);
+        [-0.62, 0.28].forEach((offset, index) => {
+          const building = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.58 + index * 0.12, 1.58),
+            new THREE.MeshBasicMaterial({ color: 0x9eb0b8, transparent: true, opacity: 0.25, depthWrite: false }),
+          );
+          building.rotation.y = Math.PI / 2;
+          building.position.set(-5.418, 1.62, leftWindowZ + offset);
+          scene.add(building);
+        });
+        const leftWindowGlass = new THREE.Mesh(new THREE.PlaneGeometry(leftWindowWidth, leftWindowHeight), windowGlassMat.clone());
+        leftWindowGlass.rotation.y = Math.PI / 2;
+        leftWindowGlass.position.set(leftWindowX, leftWindowY, leftWindowZ);
+        scene.add(leftWindowGlass);
+        [
+          [0, leftWindowHeight / 2 + 0.045, 0, 0.13, 0.07, leftWindowWidth + 0.16],
+          [0, -leftWindowHeight / 2 - 0.045, 0, 0.13, 0.07, leftWindowWidth + 0.16],
+          [0, 0, -leftWindowWidth / 2 - 0.045, 0.13, leftWindowHeight + 0.16, 0.07],
+          [0, 0, leftWindowWidth / 2 + 0.045, 0.13, leftWindowHeight + 0.16, 0.07],
+        ].forEach(([dx, dy, dz, sx, sy, sz]) => {
+          const framePart = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), windowFrameMat);
+          framePart.position.set(leftWindowX + dx, leftWindowY + dy, leftWindowZ + dz);
+          framePart.castShadow = true;
+          scene.add(framePart);
+        });
+        const leftWindowSill = new THREE.Mesh(
+          new THREE.BoxGeometry(0.26, 0.055, leftWindowWidth + 0.18),
+          new THREE.MeshStandardMaterial({ color: 0xe3ecf0, roughness: 0.42 }),
+        );
+        leftWindowSill.position.set(-5.39, 0.94, leftWindowZ);
+        scene.add(leftWindowSill);
 
         // ── DOOR (back wall, patient-left side) ────────────────────────────────
         const doorFrameMatD  = new THREE.MeshStandardMaterial({ color: 0xf1f6f8, roughness: 0.50 });
@@ -927,6 +1050,28 @@
         callBtnLabel.position.set(-1.22, 1.89, -3.034);
         scene.add(callBtnLabel);
 
+        const bedToHeadwallOffsetZ = -1.18;
+        const headwallBedZ = (z) => z + bedToHeadwallOffsetZ;
+        const bedLayoutOriginalCenter = new THREE.Vector3(0.35, 0, headwallBedZ(-0.35));
+        const bedLayoutCenter = new THREE.Vector3(-0.45, 0, -0.72);
+        const bedLayoutRotationY = Math.PI / 2;
+        function bedLayoutPoint(x, y, z) {
+          const dx = x - bedLayoutOriginalCenter.x;
+          const dz = z - bedLayoutOriginalCenter.z;
+          return new THREE.Vector3(bedLayoutCenter.x - dz, y, bedLayoutCenter.z + dx);
+        }
+        function orientBedLayoutObject(object, rotate = true) {
+          object.position.copy(bedLayoutPoint(object.position.x, object.position.y, object.position.z));
+          if (rotate) object.rotation.y += bedLayoutRotationY;
+          return object;
+        }
+        function bedLayoutTubePoints(points) {
+          return points.map(([x, y, z]) => {
+            const point = bedLayoutPoint(x, y, z);
+            return [point.x, point.y, point.z];
+          });
+        }
+
         const normalBedColor = new THREE.Color(0x8fa9b6);
         const painAlertBedColor = new THREE.Color(0xd94b43);
         const bedMaterial = new THREE.MeshStandardMaterial({
@@ -935,64 +1080,148 @@
           metalness: 0.04,
         });
         const bed = roundedBox(4.8, 0.52, 2.05, 0.13, bedMaterial);
-        bed.position.set(0.35, 0.82, -0.35);
+        bed.position.set(0.35, 0.82, headwallBedZ(-0.35));
+        orientBedLayoutObject(bed);
         bed.castShadow = true;
         scene.add(bed);
 
+        const bedFrameMaterial = new THREE.MeshStandardMaterial({ color: 0xb9c9d1, roughness: 0.46, metalness: 0.18 });
+        const bedPanelMaterial = new THREE.MeshStandardMaterial({ color: 0xe4eef2, roughness: 0.56, metalness: 0.04 });
+        const bedTrimMaterial = new THREE.MeshStandardMaterial({ color: 0x7f9aa6, roughness: 0.38, metalness: 0.22 });
+        const underFrame = roundedBox(4.36, 0.12, 1.72, 0.055, bedFrameMaterial);
+        underFrame.position.set(0.28, 0.58, headwallBedZ(-0.35));
+        orientBedLayoutObject(underFrame);
+        underFrame.castShadow = true;
+        scene.add(underFrame);
+        [
+          [0.28, 0.64, 0.62, 4.35, 0.06, 0.07],
+          [0.28, 0.64, -1.32, 4.35, 0.06, 0.07],
+          [-2.0, 0.64, -0.35, 0.08, 0.06, 1.8],
+          [2.35, 0.64, -0.35, 0.08, 0.06, 1.8],
+        ].forEach(([x, y, z, sx, sy, sz]) => {
+          const frameBar = roundedBox(sx, sy, sz, 0.018, bedTrimMaterial);
+          frameBar.position.set(x, y, headwallBedZ(z));
+          orientBedLayoutObject(frameBar);
+          frameBar.castShadow = true;
+          scene.add(frameBar);
+        });
+
         const mattressMaterial = new THREE.MeshStandardMaterial({ color: 0xeef5f7, map: sheetTexture, roughness: 0.92 });
         const mattressTop = roundedBox(4.48, 0.18, 1.82, 0.12, mattressMaterial);
-        mattressTop.position.set(0.26, 1.12, -0.35);
+        mattressTop.position.set(0.26, 1.12, headwallBedZ(-0.35));
+        orientBedLayoutObject(mattressTop);
         mattressTop.castShadow = true;
         mattressTop.receiveShadow = true;
         scene.add(mattressTop);
+
+        const headBoard = roundedBox(0.22, 1.02, 1.98, 0.075, bedPanelMaterial);
+        headBoard.position.set(-2.12, 1.06, headwallBedZ(-0.35));
+        orientBedLayoutObject(headBoard);
+        headBoard.castShadow = true;
+        headBoard.receiveShadow = true;
+        scene.add(headBoard);
+        const footBoard = roundedBox(0.2, 0.82, 1.9, 0.07, bedPanelMaterial);
+        footBoard.position.set(2.55, 0.96, headwallBedZ(-0.35));
+        orientBedLayoutObject(footBoard);
+        footBoard.castShadow = true;
+        footBoard.receiveShadow = true;
+        scene.add(footBoard);
+        [
+          [-2.245, 1.46, -0.35, 0.038, 0.06, 1.64],
+          [2.665, 1.23, -0.35, 0.038, 0.055, 1.54],
+        ].forEach(([x, y, z, sx, sy, sz]) => {
+          const boardHandle = roundedBox(sx, sy, sz, 0.016, bedTrimMaterial);
+          boardHandle.position.set(x, y, headwallBedZ(z));
+          orientBedLayoutObject(boardHandle);
+          boardHandle.castShadow = true;
+          scene.add(boardHandle);
+        });
+        const bedControlPanel = roundedBox(0.018, 0.3, 0.42, 0.014, new THREE.MeshStandardMaterial({ color: 0x24363d, roughness: 0.4, metalness: 0.08 }));
+        bedControlPanel.position.set(2.675, 1.05, headwallBedZ(0.32));
+        orientBedLayoutObject(bedControlPanel);
+        scene.add(bedControlPanel);
+        [0.21, 0.32, 0.43].forEach((z, index) => {
+          const controlButton = new THREE.Mesh(
+            new THREE.BoxGeometry(0.012, 0.035, 0.055),
+            new THREE.MeshBasicMaterial({ color: index === 0 ? 0x7ed6a5 : 0xd8e4e8 }),
+          );
+          controlButton.position.set(2.686, 1.07, headwallBedZ(z));
+          orientBedLayoutObject(controlButton);
+          scene.add(controlButton);
+        });
 
         const mattressEdgeMaterial = new THREE.MeshStandardMaterial({ color: 0xe7f0f3, map: sheetTexture, roughness: 0.92 });
         [0.58, -1.28].forEach((z) => {
           const edge = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 4.36, 18), mattressEdgeMaterial);
           edge.rotation.z = Math.PI / 2;
-          edge.position.set(0.26, 1.22, z);
+          edge.position.set(0.26, 1.22, headwallBedZ(z));
+          orientBedLayoutObject(edge);
           edge.castShadow = true;
           scene.add(edge);
         });
 
         const railMaterial = new THREE.MeshStandardMaterial({ color: 0xd7e1e6, metalness: 0.28, roughness: 0.36 });
-        const bedRailNear = roundedBox(3.1, 0.1, 0.06, 0.025, railMaterial);
-        bedRailNear.position.set(0.15, 1.24, 0.74);
+        const bedRailNear = roundedBox(3.1, 0.22, 0.088, 0.038, railMaterial);
+        bedRailNear.position.set(0.15, 1.58, headwallBedZ(0.74));
+        orientBedLayoutObject(bedRailNear);
         bedRailNear.castShadow = true;
         scene.add(bedRailNear);
-        const bedRailFar = roundedBox(2.8, 0.08, 0.05, 0.02, railMaterial);
-        bedRailFar.position.set(0.45, 1.2, -1.42);
+        const bedRailFar = roundedBox(2.95, 0.045, 0.042, 0.016, railMaterial);
+        bedRailFar.position.set(0.58, 0.66, headwallBedZ(-1.12));
+        orientBedLayoutObject(bedRailFar);
         bedRailFar.castShadow = true;
         scene.add(bedRailFar);
         [-1.15, 0.15, 1.45].forEach((x) => {
-          const railPost = roundedBox(0.045, 0.42, 0.045, 0.018, railMaterial);
-          railPost.position.set(x, 1.05, 0.74);
+          const railPost = roundedBox(0.06, 0.86, 0.06, 0.02, railMaterial);
+          railPost.position.set(x, 1.19, headwallBedZ(0.74));
+          orientBedLayoutObject(railPost);
+          railPost.castShadow = true;
+          scene.add(railPost);
+        });
+        [-0.78, 0.18, 1.12, 1.92].forEach((x) => {
+          const railPost = roundedBox(0.03, 0.055, 0.03, 0.01, railMaterial);
+          railPost.position.set(x, 0.64, headwallBedZ(-1.12));
+          orientBedLayoutObject(railPost);
           railPost.castShadow = true;
           scene.add(railPost);
         });
 
+        const bedCasterMaterial = new THREE.MeshStandardMaterial({ color: 0x202a2f, roughness: 0.48, metalness: 0.1 });
+        const casterForkMaterial = new THREE.MeshStandardMaterial({ color: 0x9badb5, roughness: 0.34, metalness: 0.42 });
         [-1.72, 1.85].forEach((x) => {
           [0.58, -1.22].forEach((z) => {
-            const caster = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.018, 8, 20), new THREE.MeshStandardMaterial({ color: 0x243036, roughness: 0.5, metalness: 0.12 }));
-            caster.position.set(x, 0.49, z);
+            const fork = roundedBox(0.13, 0.12, 0.04, 0.012, casterForkMaterial);
+            fork.position.set(x, 0.43, headwallBedZ(z));
+            orientBedLayoutObject(fork);
+            fork.castShadow = true;
+            scene.add(fork);
+            const caster = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.022, 10, 24), bedCasterMaterial);
+            caster.position.set(x, 0.36, headwallBedZ(z));
             caster.rotation.y = Math.PI / 2;
+            orientBedLayoutObject(caster);
             caster.castShadow = true;
             scene.add(caster);
+            const brake = roundedBox(0.09, 0.018, 0.035, 0.006, new THREE.MeshStandardMaterial({ color: 0xd64a3a, roughness: 0.5 }));
+            brake.position.set(x + 0.055, 0.43, headwallBedZ(z));
+            orientBedLayoutObject(brake);
+            scene.add(brake);
           });
         });
 
         const pillow = roundedBox(0.86, 0.14, 0.72, 0.12, new THREE.MeshStandardMaterial({ color: 0xf4f8fa, map: sheetTexture, roughness: 0.9 }));
-        pillow.position.set(-1.64, 1.31, -0.35);
+        pillow.position.set(-1.64, 1.31, headwallBedZ(-0.35));
         pillow.rotation.z = -0.08;
+        orientBedLayoutObject(pillow);
         pillow.castShadow = true;
         scene.add(pillow);
         const pillowIndent = new THREE.Mesh(
           new THREE.CircleGeometry(0.24, 24),
           new THREE.MeshBasicMaterial({ color: 0xb8c4ca, transparent: true, opacity: 0.16, depthWrite: false }),
         );
-        pillowIndent.position.set(-1.72, 1.39, -0.35);
+        pillowIndent.position.set(-1.72, 1.39, headwallBedZ(-0.35));
         pillowIndent.rotation.x = -Math.PI / 2;
         pillowIndent.scale.set(1.18, 0.62, 1);
+        orientBedLayoutObject(pillowIndent, false);
         scene.add(pillowIndent);
 
         const headElevationWedge = roundedBox(
@@ -1002,8 +1231,9 @@
           0.08,
           new THREE.MeshStandardMaterial({ color: 0xe7f0f3, map: sheetTexture, roughness: 0.9 }),
         );
-        headElevationWedge.position.set(-1.34, 1.2, -0.35);
+        headElevationWedge.position.set(-1.34, 1.2, headwallBedZ(-0.35));
         headElevationWedge.rotation.z = -0.22;
+        orientBedLayoutObject(headElevationWedge);
         headElevationWedge.visible = false;
         headElevationWedge.castShadow = true;
         scene.add(headElevationWedge);
@@ -1208,6 +1438,11 @@
           cameraPan.y = THREE.MathUtils.clamp(cameraPan.y + (deltaY / height) * 0.62, -0.24, 0.28);
         }
 
+        function updateCameraZoom(delta) {
+          cameraZoom = THREE.MathUtils.clamp(cameraZoom + delta, 0, 1);
+          setInteractionHint("scenePan");
+        }
+
         renderer.domElement.addEventListener("pointerdown", (event) => {
           if (event.button !== undefined && event.button !== 0) return;
           pointerDragState.active = true;
@@ -1267,6 +1502,21 @@
           if (pointerDragState.active) return;
           renderer.domElement.style.cursor = "default";
           setInteractionHint();
+        });
+
+        renderer.domElement.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          updateCameraZoom(event.deltaY < 0 ? 0.08 : -0.08);
+        }, { passive: false });
+
+        window.addEventListener("keydown", (event) => {
+          if (event.defaultPrevented) return;
+          if (event.key === "+" || event.key === "=") updateCameraZoom(0.08);
+          if (event.key === "-" || event.key === "_") updateCameraZoom(-0.08);
+          if (event.key === "0") {
+            cameraZoom = 0;
+            cameraPan.set(0, 0);
+          }
         });
 
         renderer.domElement.addEventListener("click", (event) => {
@@ -1404,6 +1654,29 @@
           monitorCanvasContext.stroke();
         }
 
+        function drawCapnogramWaveform(baseline, offset, color, amplitude = 34, breathWidth = 118) {
+          monitorCanvasContext.strokeStyle = color;
+          monitorCanvasContext.lineWidth = 3.2;
+          monitorCanvasContext.lineJoin = "round";
+          monitorCanvasContext.beginPath();
+
+          for (let x = -breathWidth; x <= monitorCanvas.width + breathWidth; x += 4) {
+            const phase = (((x + offset) % breathWidth) + breathWidth) % breathWidth / breathWidth;
+            let shape = 0;
+            if (phase < 0.16) shape = phase / 0.16;
+            else if (phase < 0.6) shape = 1 + (phase - 0.16) * 0.08;
+            else if (phase < 0.68) shape = 1 - (phase - 0.6) / 0.08;
+            else shape = 0;
+            const retention = THREE.MathUtils.clamp(((latestPatientState?.gbsWorkflow?.etco2 || 40) - 42) / 18, 0, 1);
+            const baselineLift = retention * 5.5;
+            const y = baseline - shape * amplitude + baselineLift + Math.sin((x + offset) * 0.018) * retention * 2.2;
+            if (x <= -breathWidth) monitorCanvasContext.moveTo(x, y);
+            else monitorCanvasContext.lineTo(x, y);
+          }
+
+          monitorCanvasContext.stroke();
+        }
+
         function drawEcgWaveform(offset, baseline = 152) {
           const patientPain = latestPatientState?.patientStatus?.pain ?? 0;
           const patientAnxiety = latestPatientState?.patientStatus?.anxiety ?? 0;
@@ -1465,9 +1738,12 @@
 
           const vitals = latestVitals || { hr: "--", spo2: "--", rr: "--", bp: "--" };
           const active = Boolean(isMonitorActive && latestVitals);
+          const isGbsMonitor = latestPatientState?.currentEpisode === "gbsRespiratory";
+          const gbsWorkflow = latestPatientState?.gbsWorkflow || {};
           const color = active ? monitorColor() : "#2f5f55";
           const spo2Color = active && Number(vitals.spo2) <= 90 ? "#ff4d4d" : active && Number(vitals.spo2) <= 92 ? "#ffd166" : "#7dd3fc";
           const rrColor = active && Number(vitals.rr) >= 28 ? "#ffd166" : "#ffd166";
+          const co2Color = active && Number(gbsWorkflow.etco2) >= 50 ? "#ffd166" : "#f5c542";
           const alarmStrength = latestCueProfile.alarm || 0;
           const time = performance.now();
           const waveRight = 328;
@@ -1475,12 +1751,12 @@
           monitorCanvasContext.textBaseline = "top";
           monitorCanvasContext.fillStyle = "#9fb5bd";
           monitorCanvasContext.font = "900 18px Menlo, Consolas, monospace";
-          monitorCanvasContext.fillText("KHSIM PACU-ICU", 18, 12);
+          monitorCanvasContext.fillText("KHSIM INTELLIVUE", 18, 12);
           monitorCanvasContext.fillStyle = active ? "#40f39d" : "#2f5f55";
-          monitorCanvasContext.fillText(active ? "MONITORING" : "STANDBY", 192, 12);
+          monitorCanvasContext.fillText(active ? "BED 703" : "STANDBY", 210, 12);
           monitorCanvasContext.fillStyle = "#ffd166";
           monitorCanvasContext.font = "900 14px Menlo, Consolas, monospace";
-          monitorCanvasContext.fillText("II  x1.0  NIBP", 348, 16);
+          monitorCanvasContext.fillText(isGbsMonitor ? "II  SpO2  CO2  NIBP" : "II  x1.0  NIBP", 330, 16);
 
           monitorCanvasContext.strokeStyle = "rgba(159, 181, 189, 0.22)";
           monitorCanvasContext.lineWidth = 2;
@@ -1502,7 +1778,7 @@
           monitorCanvasContext.font = "900 13px Menlo, Consolas, monospace";
           monitorCanvasContext.fillText("ECG II", 18, 48);
           monitorCanvasContext.fillText("SpO2 PLETH", 18, 142);
-          monitorCanvasContext.fillText("RESP", 18, 228);
+          monitorCanvasContext.fillText(isGbsMonitor ? "CO2" : "RESP", 18, 228);
 
           monitorCanvasContext.save();
           monitorCanvasContext.beginPath();
@@ -1513,7 +1789,8 @@
             const beatWidth = THREE.MathUtils.clamp(7200 / hrValue, 46, 96);
             drawEcgWaveform((time * (0.09 + latestCueProfile.rhythmInstability * 0.035)) % 512, 92);
             drawPlethWaveform(178, (time * (0.09 + latestCueProfile.rhythmInstability * 0.018)) % 512, spo2Color, 24 + latestCueProfile.alarm * 4, beatWidth);
-            drawRespWaveform(250, (time * (0.033 + latestCueProfile.breathingEffort * 0.016)) % 512, rrColor, 18 + latestCueProfile.breathingEffort * 5, 150);
+            if (isGbsMonitor) drawCapnogramWaveform(264, (time * (0.052 + latestCueProfile.breathingEffort * 0.01)) % 512, co2Color, 30 + latestCueProfile.breathingEffort * 5, 122);
+            else drawRespWaveform(250, (time * (0.033 + latestCueProfile.breathingEffort * 0.016)) % 512, rrColor, 18 + latestCueProfile.breathingEffort * 5, 150);
           } else {
             drawVitalsStrip(92, 0, "#24423d", 8, 88);
             drawPlethWaveform(178, 0, "#24423d", 8, 78);
@@ -1535,14 +1812,21 @@
 
           drawVital("HR", vitals.hr, "bpm", 48, color, 56);
           drawVital("SpO2", vitals.spo2, "%", 124, spo2Color, 54);
-          drawVital("RR", vitals.rr, "/min", 200, rrColor, 48);
+          if (isGbsMonitor) {
+            drawVital("EtCO2", Math.round(gbsWorkflow.etco2 || 0), "mmHg", 198, co2Color, 42);
+            monitorCanvasContext.fillStyle = "#9fb5bd";
+            monitorCanvasContext.font = "900 13px Menlo, Consolas, monospace";
+            monitorCanvasContext.fillText("RR " + (active ? vitals.rr : "--") + "/min", 348, 258);
+          } else {
+            drawVital("RR", vitals.rr, "/min", 200, rrColor, 48);
+          }
 
           monitorCanvasContext.fillStyle = "#9fb5bd";
           monitorCanvasContext.font = "900 18px Menlo, Consolas, monospace";
-          monitorCanvasContext.fillText("NIBP", 348, 270);
+          monitorCanvasContext.fillText("NIBP", 348, isGbsMonitor ? 276 : 270);
           monitorCanvasContext.fillStyle = active ? "#f3f7f4" : "#2f5f55";
           monitorCanvasContext.font = "900 26px Menlo, Consolas, monospace";
-          monitorCanvasContext.fillText(active ? vitals.bp : "---/--", 348, 292);
+          monitorCanvasContext.fillText(active ? vitals.bp : "---/--", 348, isGbsMonitor ? 296 : 292);
 
           if (active && (latestUrgency.level === "critical" || latestUrgency.level === "severe" || alarmStrength > 0.55)) {
             const blinkRate = latestUrgency.level === "critical" ? 260 : 420;
@@ -1558,8 +1842,8 @@
         }
 
         const patientSupineBase = {
-          position: new THREE.Vector3(-2.48, 1.36, -0.35),
-          rotation: new THREE.Euler(0, 0, Math.PI / 2),
+          position: bedLayoutPoint(-2.62, 1.36, headwallBedZ(-0.35)).add(new THREE.Vector3(0, 0, 0.82)),
+          rotation: new THREE.Euler(0, -Math.PI / 2, Math.PI / 2),
           scale: 1.58,
           skinColor: new THREE.Color(0xc99a78),
           pallorColor: new THREE.Color(0xd8ddd7),
@@ -1588,7 +1872,7 @@
           patientModelAxisCorrection.add(new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 0.9, 0x4ade80));
         }
         let patientHeadAnchor = new THREE.Object3D();
-        const patientHeadAnchorBase = new THREE.Vector3(-1.85, 1.5, -0.35);
+        const patientHeadAnchorBase = bedLayoutPoint(-1.99, 1.5, headwallBedZ(-0.35));
         patientHeadAnchor.position.copy(patientHeadAnchorBase);
         scene.add(patientHeadAnchor);
 
@@ -1760,13 +2044,15 @@
           metalness: 0.0,
         });
         const patientGownTop = roundedBox(0.58, 0.09, 0.56, 0.045, patientGownMaterial);
-        patientGownTop.position.set(-0.68, 1.52, -0.35);
+        patientGownTop.position.set(-0.68, 1.52, headwallBedZ(-0.35));
+        orientBedLayoutObject(patientGownTop);
         patientGownTop.castShadow = true;
         patientGownTop.receiveShadow = true;
         patientGownTop.visible = false;
         patientGownGroup.add(patientGownTop);
         const patientGownLap = roundedBox(0.56, 0.08, 0.5, 0.04, patientGownMaterial);
-        patientGownLap.position.set(-0.34, 1.49, -0.35);
+        patientGownLap.position.set(-0.34, 1.49, headwallBedZ(-0.35));
+        orientBedLayoutObject(patientGownLap);
         patientGownLap.castShadow = true;
         patientGownLap.receiveShadow = true;
         patientGownLap.visible = false;
@@ -1777,7 +2063,8 @@
           new THREE.MeshStandardMaterial({ color: 0x17110d, roughness: 0.82 }),
         );
         patientHairCap.scale.set(1.18, 0.28, 0.86);
-        patientHairCap.position.set(-1.24, 1.43, -0.35);
+        patientHairCap.position.set(-1.24, 1.43, headwallBedZ(-0.35));
+        orientBedLayoutObject(patientHairCap);
         patientHairCap.castShadow = true;
         patientHairCap.visible = false;
         scene.add(patientHairCap);
@@ -1844,6 +2131,13 @@
           const oxygenVisible = Boolean(nextState?.oxygenApplied);
           oxygenMask.material.opacity = oxygenVisible ? 0.34 : 0.0;
           oxygenTube.material.opacity = oxygenVisible ? 0.58 : 0.0;
+          aquaPackGroup.visible = oxygenVisible;
+          aquaPackTube.material.opacity = oxygenVisible ? 0.62 : 0.0;
+          aquaPackConnectorTube.material.opacity = oxygenVisible ? 0.58 : 0.0;
+          const suctionVisible = Boolean(nextState?.gbsWorkflow?.suctionReady);
+          suctionCanisterGroup.visible = suctionVisible;
+          suctionPatientTube.material.opacity = suctionVisible ? 0.58 : 0.0;
+          suctionWallTube.material.opacity = suctionVisible ? 0.62 : 0.0;
           const headUpVisible = Boolean(nextState?.gbsWorkflow?.headOfBedRaised);
           headElevationWedge.visible = headUpVisible;
           pillow.position.y = headUpVisible ? 1.37 : 1.31;
@@ -1894,72 +2188,228 @@
         });
         const oxygenMask = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 12), oxygenMaskMaterial);
         oxygenMask.scale.set(1.05, 0.5, 0.78);
-        oxygenMask.position.set(-1.24, 1.39, -0.35);
+        oxygenMask.position.set(-1.24, 1.39, headwallBedZ(-0.35));
         oxygenMask.rotation.z = -0.12;
+        orientBedLayoutObject(oxygenMask);
         scene.add(oxygenMask);
 
         const oxygenTube = makeTube([
-          [-1.1, 1.48, -0.1],
-          [-0.78, 1.22, 0.52],
-          [0.22, 1.05, 0.86],
-          [1.75, 1.03, 1.22],
+          ...bedLayoutTubePoints([
+            [-1.1, 1.48, headwallBedZ(-0.1)],
+            [-0.95, 1.34, headwallBedZ(-0.58)],
+            [-0.58, 1.28, headwallBedZ(-0.84)],
+          ]),
+          [-0.12, 1.42, -2.55],
+          [0.2, 1.78, -2.86],
         ], 0xc7f3ff, 0.01, 0.0);
 
-        const ecgLeadMaterial = new THREE.MeshBasicMaterial({ color: 0xf7fbff, transparent: true, opacity: 0.0 });
-        const ecgPads = [
-          [-0.96, 1.57, -0.05],
-          [-0.72, 1.57, -0.58],
-          [-0.54, 1.52, -0.2],
+        const aquaPackGroup = new THREE.Group();
+        aquaPackGroup.visible = false;
+        aquaPackGroup.position.set(0.2, 1.68, -3.005);
+        scene.add(aquaPackGroup);
+        const aquaBracket = roundedBox(0.13, 0.055, 0.03, 0.012, new THREE.MeshStandardMaterial({ color: 0xb9c6cb, metalness: 0.32, roughness: 0.34 }));
+        aquaBracket.position.set(0, 0.16, 0);
+        aquaPackGroup.add(aquaBracket);
+        const flowTube = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.019, 0.019, 0.28, 20),
+          new THREE.MeshStandardMaterial({ color: 0xeaf6f8, transparent: true, opacity: 0.82, roughness: 0.18, metalness: 0.02 }),
+        );
+        flowTube.position.set(0, 0.01, 0.025);
+        flowTube.castShadow = true;
+        aquaPackGroup.add(flowTube);
+        const aquaWater = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.0175, 0.0175, 0.11, 20),
+          new THREE.MeshBasicMaterial({ color: 0x8fd7ff, transparent: true, opacity: 0.42, depthWrite: false }),
+        );
+        aquaWater.position.set(0, -0.045, 0.026);
+        aquaPackGroup.add(aquaWater);
+        const aquaCap = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.023, 0.024, 20), new THREE.MeshStandardMaterial({ color: 0xf6fbfb, roughness: 0.46 }));
+        aquaCap.position.set(0, 0.165, 0.025);
+        aquaPackGroup.add(aquaCap);
+        const aquaDial = new THREE.Mesh(new THREE.TorusGeometry(0.033, 0.006, 8, 24), new THREE.MeshStandardMaterial({ color: 0x2ca04d, roughness: 0.34 }));
+        aquaDial.rotation.x = Math.PI / 2;
+        aquaDial.position.set(0, 0.205, 0.035);
+        aquaPackGroup.add(aquaDial);
+        const aquaPackTube = makeTube([
+          [0.2, 1.93, -2.99],
+          [0.2, 1.84, -2.96],
+          [0.2, 1.72, -2.98],
+        ], 0xc7f3ff, 0.007, 0.0);
+        const aquaPackConnectorTube = makeTube([
+          [0.2, 1.67, -2.98],
+          [0.14, 1.58, -2.78],
+          [0.06, 1.48, -2.62],
+          [-0.08, 1.38, -2.38],
+        ], 0xc7f3ff, 0.008, 0.0);
+
+        const suctionCanisterGroup = new THREE.Group();
+        suctionCanisterGroup.visible = false;
+        suctionCanisterGroup.position.set(0.52, 1.58, -3.005);
+        scene.add(suctionCanisterGroup);
+        const suctionBracket = roundedBox(0.18, 0.055, 0.032, 0.012, new THREE.MeshStandardMaterial({ color: 0xb5c2c8, metalness: 0.36, roughness: 0.34 }));
+        suctionBracket.position.set(0, 0.22, 0);
+        suctionCanisterGroup.add(suctionBracket);
+        const canisterBody = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.065, 0.068, 0.32, 24),
+          new THREE.MeshStandardMaterial({ color: 0xf4fbfb, transparent: true, opacity: 0.56, roughness: 0.12, metalness: 0.02 }),
+        );
+        canisterBody.position.set(0, 0.02, 0.035);
+        canisterBody.castShadow = true;
+        suctionCanisterGroup.add(canisterBody);
+        const canisterFluid = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.061, 0.063, 0.09, 24),
+          new THREE.MeshBasicMaterial({ color: 0xd9c58d, transparent: true, opacity: 0.36, depthWrite: false }),
+        );
+        canisterFluid.position.set(0, -0.095, 0.036);
+        suctionCanisterGroup.add(canisterFluid);
+        const canisterLid = new THREE.Mesh(new THREE.CylinderGeometry(0.071, 0.071, 0.032, 24), new THREE.MeshStandardMaterial({ color: 0xf1f4f2, roughness: 0.44 }));
+        canisterLid.position.set(0, 0.195, 0.035);
+        suctionCanisterGroup.add(canisterLid);
+        const suctionGauge = new THREE.Mesh(new THREE.CircleGeometry(0.038, 20), new THREE.MeshBasicMaterial({ color: 0xf8fbfa, transparent: true, opacity: 0.95 }));
+        suctionGauge.position.set(0.095, 0.165, 0.04);
+        suctionCanisterGroup.add(suctionGauge);
+        const suctionWallTube = makeTube([
+          [0.52, 1.93, -2.99],
+          [0.52, 1.82, -2.96],
+          [0.52, 1.72, -2.96],
+          [0.52, 1.62, -2.98],
+        ], 0xe8f2f3, 0.008, 0.0);
+        const suctionPatientTube = makeTube([
+          [0.52, 1.48, -2.96],
+          [0.44, 1.28, -2.55],
+          [0.12, 1.18, -2.22],
+          ...bedLayoutTubePoints([
+            [-0.62, 1.18, headwallBedZ(-1.2)],
+            [-1.05, 1.34, headwallBedZ(-0.52)],
+          ]),
+        ], 0xe8f2f3, 0.01, 0.0);
+
+        const ecgLeadMaterial = new THREE.MeshBasicMaterial({ color: 0xf7fbff, transparent: true, opacity: 0.0, depthWrite: false });
+        const ecgPadBasePositions = [
+          [-0.92, 1.392, headwallBedZ(-0.1)],
+          [-0.72, 1.394, headwallBedZ(-0.46)],
+          [-0.48, 1.366, headwallBedZ(-0.22)],
         ].map(([x, y, z]) => {
-          const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.012, 18), ecgLeadMaterial.clone());
+          const point = bedLayoutPoint(x, y, z);
+          return [point.x, point.y, point.z];
+        });
+        const ecgPads = ecgPadBasePositions.map(([x, y, z]) => {
+          const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.01, 24), ecgLeadMaterial.clone());
           pad.position.set(x, y, z);
-          pad.rotation.x = Math.PI / 2;
+          pad.rotation.z = 0.08;
+          pad.rotation.y += bedLayoutRotationY;
           scene.add(pad);
           return pad;
         });
         const ecgLeadLines = [
-          makeTube([[-0.96, 1.57, -0.05], [-1.12, 1.53, -0.42], [-1.48, 1.46, -0.82], [-2.04, 1.48, -0.98], [-2.32, 1.62, -0.98]], 0xe7edf2, 0.006, 0.0),
-          makeTube([[-0.72, 1.57, -0.58], [-1.04, 1.5, -0.72], [-1.46, 1.43, -0.9], [-2.02, 1.47, -1.03], [-2.32, 1.64, -1.0]], 0xe7edf2, 0.006, 0.0),
-          makeTube([[-0.54, 1.52, -0.2], [-0.94, 1.47, -0.55], [-1.42, 1.41, -0.86], [-2.0, 1.46, -1.06], [-2.32, 1.66, -1.02]], 0xe7edf2, 0.006, 0.0),
-          makeTube([[-1.48, 1.45, -0.86], [-1.76, 1.38, -0.96], [-2.12, 1.42, -1.02], [-2.34, 1.56, -1.04]], 0xd9e3e8, 0.013, 0.0),
+          makeTube(bedLayoutTubePoints([[-0.92, 1.397, headwallBedZ(-0.1)], [-1.02, 1.382, headwallBedZ(-0.34)], [-1.15, 1.342, headwallBedZ(-0.62)], [-1.31, 1.312, headwallBedZ(-0.84)], [-1.48, 1.318, headwallBedZ(-0.94)]]), 0xe7edf2, 0.006, 0.0),
+          makeTube(bedLayoutTubePoints([[-0.72, 1.399, headwallBedZ(-0.46)], [-0.9, 1.382, headwallBedZ(-0.62)], [-1.08, 1.347, headwallBedZ(-0.76)], [-1.28, 1.317, headwallBedZ(-0.88)], [-1.48, 1.318, headwallBedZ(-0.94)]]), 0xe7edf2, 0.006, 0.0),
+          makeTube(bedLayoutTubePoints([[-0.48, 1.371, headwallBedZ(-0.22)], [-0.75, 1.352, headwallBedZ(-0.43)], [-1.0, 1.327, headwallBedZ(-0.68)], [-1.24, 1.307, headwallBedZ(-0.86)], [-1.48, 1.318, headwallBedZ(-0.94)]]), 0xe7edf2, 0.006, 0.0),
+          makeTube([...bedLayoutTubePoints([[-1.48, 1.318, headwallBedZ(-0.94)], [-1.72, 1.2, headwallBedZ(-1.05)]]), [-1.65, 1.14, -2.1], [-1.72, 1.32, -2.42], [-1.92, 1.58, -2.72]], 0xd9e3e8, 0.013, 0.0),
         ];
 
         const ecgAccessoryMeshes = [];
         const ecgCableClip = roundedBox(0.1, 0.055, 0.07, 0.018, new THREE.MeshBasicMaterial({ color: 0xeef4f6, transparent: true, opacity: 0.0, depthWrite: false }));
-        ecgCableClip.position.set(-1.48, 1.45, -0.86);
+        ecgCableClip.position.set(-1.48, 1.318, headwallBedZ(-0.94));
+        orientBedLayoutObject(ecgCableClip);
         scene.add(ecgCableClip);
         ecgAccessoryMeshes.push(ecgCableClip);
 
         const ivPoleMaterial = new THREE.MeshStandardMaterial({ color: 0xc7d0d6, metalness: 0.42, roughness: 0.3 });
+        const ivPoleX = -2.18;
+        const ivPoleZ = headwallBedZ(0.72);
         const ivPole = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.62, 12), ivPoleMaterial);
-        ivPole.position.set(1.9, 1.63, 0.92);
+        ivPole.position.set(ivPoleX, 1.63, ivPoleZ);
+        orientBedLayoutObject(ivPole, false);
         ivPole.castShadow = true;
         scene.add(ivPole);
         registerInteractive(ivPole, "iv");
+        const ivPoleLowerSleeve = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.034, 0.034, 0.22, 18),
+          new THREE.MeshStandardMaterial({ color: 0x9cadb5, roughness: 0.32, metalness: 0.44 }),
+        );
+        ivPoleLowerSleeve.position.set(ivPoleX, 0.98, ivPoleZ);
+        orientBedLayoutObject(ivPoleLowerSleeve, false);
+        ivPoleLowerSleeve.castShadow = true;
+        scene.add(ivPoleLowerSleeve);
+        registerInteractive(ivPoleLowerSleeve, "iv");
+        const ivPoleBedClamp = roundedBox(0.32, 0.1, 0.08, 0.022, new THREE.MeshStandardMaterial({ color: 0xb8c8cf, roughness: 0.38, metalness: 0.36 }));
+        ivPoleBedClamp.position.set(-2.08, 0.93, headwallBedZ(0.68));
+        ivPoleBedClamp.rotation.y = -0.16;
+        orientBedLayoutObject(ivPoleBedClamp);
+        ivPoleBedClamp.castShadow = true;
+        scene.add(ivPoleBedClamp);
+        registerInteractive(ivPoleBedClamp, "iv");
+        const ivPoleClampArm = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.014, 0.014, 0.36, 12),
+          new THREE.MeshStandardMaterial({ color: 0x9cadb5, roughness: 0.3, metalness: 0.46 }),
+        );
+        ivPoleClampArm.rotation.z = Math.PI / 2;
+        ivPoleClampArm.position.set(-2.02, 0.93, headwallBedZ(0.72));
+        orientBedLayoutObject(ivPoleClampArm);
+        ivPoleClampArm.castShadow = true;
+        scene.add(ivPoleClampArm);
+        registerInteractive(ivPoleClampArm, "iv");
+        const ivPoleBaseCup = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.055, 0.05, 0.035, 20),
+          new THREE.MeshStandardMaterial({ color: 0x7f929b, roughness: 0.36, metalness: 0.5 }),
+        );
+        ivPoleBaseCup.position.set(ivPoleX, 0.84, ivPoleZ);
+        orientBedLayoutObject(ivPoleBaseCup, false);
+        ivPoleBaseCup.castShadow = true;
+        scene.add(ivPoleBaseCup);
+        registerInteractive(ivPoleBaseCup, "iv");
         const ivBag = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.3, 0.055),
           new THREE.MeshBasicMaterial({ color: 0xe9fbff, transparent: true, opacity: 0.38 }),
         );
-        ivBag.position.set(1.9, 2.42, 0.92);
+        ivBag.position.set(ivPoleX, 2.42, ivPoleZ);
+        orientBedLayoutObject(ivBag);
         scene.add(ivBag);
         registerInteractive(ivBag, "iv");
-        const ivLine = makeTube([[1.9, 2.27, 0.92], [1.45, 1.83, 0.7], [0.55, 1.43, 0.5], [-0.02, 1.42, 0.46]], 0xe9fbff, 0.0055, 0.46);
-        registerInteractive(ivLine, "iv");
-        const ivPort = roundedBox(0.16, 0.05, 0.08, 0.018, new THREE.MeshBasicMaterial({ color: 0xeefbff, transparent: true, opacity: 0.62 }));
-        ivPort.position.set(-0.04, 1.43, 0.48);
-        ivPort.rotation.z = -0.08;
+        const dripChamber = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.024, 0.022, 0.18, 18),
+          new THREE.MeshBasicMaterial({ color: 0xe9fbff, transparent: true, opacity: 0.44, depthWrite: false }),
+        );
+        dripChamber.position.set(ivPoleX, 2.17, ivPoleZ);
+        orientBedLayoutObject(dripChamber, false);
+        scene.add(dripChamber);
+        registerInteractive(dripChamber, "iv");
+        const dripFluid = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.021, 0.02, 0.052, 18),
+          new THREE.MeshBasicMaterial({ color: 0xbbefff, transparent: true, opacity: 0.36, depthWrite: false }),
+        );
+        dripFluid.position.set(ivPoleX, 2.115, ivPoleZ);
+        orientBedLayoutObject(dripFluid, false);
+        scene.add(dripFluid);
+        const ivLineUpper = makeTube(bedLayoutTubePoints([[ivPoleX, 2.28, ivPoleZ], [ivPoleX, 2.22, ivPoleZ], [ivPoleX, 2.08, ivPoleZ], [ivPoleX, 1.99, ivPoleZ]]), 0xe9fbff, 0.0055, 0.44);
+        registerInteractive(ivLineUpper, "iv");
+        const ivLineLower = makeTube(bedLayoutTubePoints([[ivPoleX, 1.79, ivPoleZ], [-1.94, 1.58, headwallBedZ(0.69)], [-1.52, 1.38, headwallBedZ(0.62)], [-0.92, 1.28, headwallBedZ(0.54)], [-0.42, 1.31, headwallBedZ(0.49)], [-0.16, 1.345, headwallBedZ(0.44)]]), 0xe9fbff, 0.0065, 0.5);
+        registerInteractive(ivLineLower, "iv");
+        const ivPort = roundedBox(0.14, 0.034, 0.072, 0.014, new THREE.MeshBasicMaterial({ color: 0xeefbff, transparent: true, opacity: 0.66, depthWrite: false }));
+        ivPort.position.set(-0.16, 1.355, headwallBedZ(0.44));
+        ivPort.rotation.z = -0.18;
+        orientBedLayoutObject(ivPort);
         scene.add(ivPort);
         registerInteractive(ivPort, "iv");
+        const ivTape = roundedBox(0.2, 0.018, 0.095, 0.008, new THREE.MeshBasicMaterial({ color: 0xf8fbff, transparent: true, opacity: 0.42, depthWrite: false }));
+        ivTape.position.set(-0.16, 1.36, headwallBedZ(0.44));
+        ivTape.rotation.z = -0.18;
+        orientBedLayoutObject(ivTape);
+        scene.add(ivTape);
+        registerInteractive(ivTape, "iv");
         const ivHotspot = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.25, 32), hotspotMaterial);
-        ivHotspot.position.set(0.05, 1.5, 0.56);
+        ivHotspot.position.set(-0.08, 1.43, headwallBedZ(0.53));
         ivHotspot.rotation.x = -Math.PI / 2;
+        orientBedLayoutObject(ivHotspot, false);
         scene.add(ivHotspot);
         registerInteractive(ivHotspot, "iv");
 
         // ── IV PUMP (clamped to pole) ──────────────────────────────────────────
         const ivPumpBodyMat = new THREE.MeshStandardMaterial({ color: 0xdae8ec, roughness: 0.50 });
         const ivPumpBody = roundedBox(0.172, 0.265, 0.132, 0.022, ivPumpBodyMat);
-        ivPumpBody.position.set(1.9, 1.89, 0.92);
+        ivPumpBody.position.set(ivPoleX, 1.89, ivPoleZ);
+        orientBedLayoutObject(ivPumpBody);
         ivPumpBody.castShadow = true;
         scene.add(ivPumpBody);
         registerInteractive(ivPumpBody, "iv");
@@ -1969,7 +2419,8 @@
           new THREE.MeshBasicMaterial({ color: 0x081e25 }),
         );
         ivPumpScreen.rotation.y = Math.PI / 2;
-        ivPumpScreen.position.set(1.968, 1.915, 0.92);
+        ivPumpScreen.position.set(ivPoleX + 0.068, 1.915, ivPoleZ);
+        orientBedLayoutObject(ivPumpScreen);
         scene.add(ivPumpScreen);
         // Rate readout glow (green, like real Alaris pump)
         const pumpGlow = new THREE.Mesh(
@@ -1977,17 +2428,20 @@
           new THREE.MeshBasicMaterial({ color: 0x38e89a, transparent: true, opacity: 0.75 }),
         );
         pumpGlow.rotation.y = Math.PI / 2;
-        pumpGlow.position.set(1.969, 1.917, 0.92);
+        pumpGlow.position.set(ivPoleX + 0.069, 1.917, ivPoleZ);
+        orientBedLayoutObject(pumpGlow);
         scene.add(pumpGlow);
         // Accent stripe
         const pumpAccent = roundedBox(0.022, 0.248, 0.022, 0.009, new THREE.MeshStandardMaterial({ color: 0x147d7e, roughness: 0.36 }));
-        pumpAccent.position.set(1.963, 1.89, 0.92);
+        pumpAccent.position.set(ivPoleX + 0.063, 1.89, ivPoleZ);
+        orientBedLayoutObject(pumpAccent);
         scene.add(pumpAccent);
         // Button row
         [1.80, 1.86, 1.92].forEach((py) => {
           const pBtn = roundedBox(0.024, 0.018, 0.013, 0.005, new THREE.MeshStandardMaterial({ color: 0x8aaab3, roughness: 0.42 }));
           pBtn.rotation.y = Math.PI / 2;
-          pBtn.position.set(1.966, py, 0.955);
+          pBtn.position.set(ivPoleX + 0.066, py, ivPoleZ + 0.035);
+          orientBedLayoutObject(pBtn);
           scene.add(pBtn);
         });
         // Clamp collar on pole
@@ -1995,10 +2449,11 @@
           new THREE.CylinderGeometry(0.026, 0.026, 0.046, 14),
           new THREE.MeshStandardMaterial({ color: 0xadbec6, metalness: 0.48, roughness: 0.24 }),
         );
-        pumpClamp.position.set(1.9, 1.89, 0.94);
+        pumpClamp.position.set(ivPoleX, 1.89, ivPoleZ + 0.02);
+        orientBedLayoutObject(pumpClamp, false);
         scene.add(pumpClamp);
         // Drip tube from bag to pump
-        makeTube([[1.9, 2.27, 0.92], [1.9, 2.02, 0.92]], 0xe9fbff, 0.0055, 0.46);
+        makeTube(bedLayoutTubePoints([[ivPoleX, 2.27, ivPoleZ], [ivPoleX, 2.02, ivPoleZ]]), 0xe9fbff, 0.0055, 0.46);
 
         const monitorCanvas = document.createElement("canvas");
         monitorCanvas.width = 512;
@@ -2008,12 +2463,18 @@
         monitorTexture.colorSpace = THREE.SRGBColorSpace;
 
         const monitorBodyMaterial = new THREE.MeshStandardMaterial({
-          color: 0x202b34,
-          roughness: 0.48,
+          color: 0x26343d,
+          roughness: 0.5,
+        });
+        const monitorTrimMaterial = new THREE.MeshStandardMaterial({
+          color: 0xeff5f5,
+          roughness: 0.56,
+          metalness: 0.04,
         });
         const monitorScreenMaterial = new THREE.MeshBasicMaterial({
           map: monitorTexture,
           toneMapped: false,
+          side: THREE.DoubleSide,
         });
         const monitorStandMaterial = new THREE.MeshStandardMaterial({
           color: 0x596771,
@@ -2021,19 +2482,53 @@
           roughness: 0.42,
         });
 
-        const monitor = roundedBox(1.05, 0.72, 0.18, 0.055, monitorBodyMaterial);
-        monitor.position.set(-2.42, 1.68, -1.05);
-        monitor.rotation.y = 0.32;
+        const monitorPosition = new THREE.Vector3(-1.92, 1.78, headwallBedZ(-1.18));
+        const monitorRotationY = -0.08;
+        const monitor = roundedBox(1.18, 0.8, 0.18, 0.06, monitorBodyMaterial);
+        monitor.position.copy(monitorPosition);
+        monitor.rotation.y = monitorRotationY;
         monitor.castShadow = true;
         scene.add(monitor);
         registerInteractive(monitor, "monitor");
 
+        const monitorOuterTrim = roundedBox(1.28, 0.9, 0.05, 0.055, monitorTrimMaterial);
+        monitorOuterTrim.position.set(monitorPosition.x, monitorPosition.y, monitorPosition.z - 0.075);
+        monitorOuterTrim.rotation.y = monitorRotationY;
+        monitorOuterTrim.castShadow = true;
+        scene.add(monitorOuterTrim);
+        registerInteractive(monitorOuterTrim, "monitor");
+
+        const monitorHandle = new THREE.Mesh(
+          new THREE.TorusGeometry(0.25, 0.026, 12, 36, Math.PI),
+          monitorTrimMaterial,
+        );
+        monitorHandle.position.set(monitorPosition.x, monitorPosition.y + 0.49, monitorPosition.z - 0.03);
+        monitorHandle.rotation.set(0, monitorRotationY, Math.PI);
+        monitorHandle.castShadow = true;
+        scene.add(monitorHandle);
+
+        const monitorSideModule = roundedBox(0.16, 0.54, 0.12, 0.028, new THREE.MeshStandardMaterial({ color: 0xdce6e8, roughness: 0.5 }));
+        monitorSideModule.position.set(monitorPosition.x + 0.69, monitorPosition.y - 0.03, monitorPosition.z + 0.01);
+        monitorSideModule.rotation.y = monitorRotationY;
+        monitorSideModule.castShadow = true;
+        scene.add(monitorSideModule);
+        registerInteractive(monitorSideModule, "monitor");
+
+        const monitorButtonMaterial = new THREE.MeshStandardMaterial({ color: 0xb8c5c8, roughness: 0.42 });
+        for (let i = 0; i < 4; i += 1) {
+          const button = roundedBox(0.07, 0.035, 0.016, 0.008, monitorButtonMaterial);
+          button.position.set(monitorPosition.x + 0.69, monitorPosition.y + 0.16 - i * 0.09, monitorPosition.z + 0.09);
+          button.rotation.y = monitorRotationY;
+          scene.add(button);
+          registerInteractive(button, "monitor");
+        }
+
         const monitorScreen = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.82, 0.5),
+          new THREE.PlaneGeometry(0.96, 0.6),
           monitorScreenMaterial,
         );
-        monitorScreen.position.set(-2.39, 1.68, -0.91);
-        monitorScreen.rotation.y = 0.32;
+        monitorScreen.position.set(monitorPosition.x, monitorPosition.y, monitorPosition.z + 0.13);
+        monitorScreen.rotation.y = monitorRotationY;
         scene.add(monitorScreen);
         registerInteractive(monitorScreen, "monitor");
         drawMonitorTexture(false);
@@ -2044,20 +2539,142 @@
           opacity: 0.18,
         });
         const monitorAlarmBeacon = new THREE.Mesh(new THREE.SphereGeometry(0.06, 18, 12), monitorAlarmMaterial);
-        monitorAlarmBeacon.position.set(-1.98, 2.02, -0.79);
+        monitorAlarmBeacon.position.set(monitorPosition.x + 0.47, monitorPosition.y + 0.44, monitorPosition.z + 0.12);
         scene.add(monitorAlarmBeacon);
 
-        const monitorNeck = roundedBox(0.12, 0.58, 0.12, 0.028, monitorStandMaterial);
-        monitorNeck.position.set(-2.42, 1.06, -1.05);
-        monitorNeck.rotation.y = 0.32;
-        monitorNeck.castShadow = true;
-        scene.add(monitorNeck);
+        const monitorWallMount = roundedBox(0.34, 0.2, 0.08, 0.025, monitorStandMaterial);
+        monitorWallMount.position.set(-2.52, 1.78, -3.04);
+        monitorWallMount.castShadow = true;
+        scene.add(monitorWallMount);
+        registerInteractive(monitorWallMount, "monitor");
 
-        const monitorBase = roundedBox(0.72, 0.08, 0.5, 0.04, monitorStandMaterial);
-        monitorBase.position.set(-2.42, 0.76, -1.05);
-        monitorBase.rotation.y = 0.32;
-        monitorBase.castShadow = true;
-        scene.add(monitorBase);
+        const monitorArmUpper = makeTube([[-2.46, 1.81, -3.0], [-2.34, 1.86, -2.78], [-2.14, 1.83, monitorPosition.z - 0.15]], 0x64727b, 0.026, 0.18);
+        const monitorArmLower = makeTube([[-2.46, 1.73, -3.0], [-2.32, 1.69, -2.78], [-2.12, 1.73, monitorPosition.z - 0.15]], 0x64727b, 0.024, 0.18);
+        registerInteractive(monitorArmUpper, "monitor");
+        registerInteractive(monitorArmLower, "monitor");
+
+        const monitorCable = makeTube([[-2.5, 1.68, -3.02], [-2.42, 1.48, -2.88], [-2.22, 1.43, -2.42], [-1.94, 1.48, monitorPosition.z - 0.05]], 0x1f2930, 0.01, 0.28);
+        registerInteractive(monitorCable, "monitor");
+
+        // ICU/transport ventilator parked in the corner for escalation readiness.
+        const ventilatorGroup = new THREE.Group();
+        ventilatorGroup.position.set(-3.72, 0.36, -2.36);
+        ventilatorGroup.rotation.y = 0.46;
+        scene.add(ventilatorGroup);
+
+        const ventFrameMat = new THREE.MeshStandardMaterial({ color: 0xdfe8ea, roughness: 0.5, metalness: 0.04 });
+        const ventDarkMat = new THREE.MeshStandardMaterial({ color: 0x26313a, roughness: 0.5 });
+        const ventTrimMat = new THREE.MeshStandardMaterial({ color: 0xa9bcc3, roughness: 0.42, metalness: 0.12 });
+
+        const ventBase = roundedBox(0.72, 0.16, 0.58, 0.045, ventDarkMat);
+        ventBase.position.set(0, 0.08, 0);
+        ventBase.castShadow = true;
+        ventilatorGroup.add(ventBase);
+
+        const ventColumn = roundedBox(0.18, 1.05, 0.16, 0.035, ventTrimMat);
+        ventColumn.position.set(-0.18, 0.68, -0.03);
+        ventColumn.castShadow = true;
+        ventilatorGroup.add(ventColumn);
+
+        const ventBody = roundedBox(0.82, 0.78, 0.34, 0.055, ventFrameMat);
+        ventBody.position.set(0.08, 1.14, 0);
+        ventBody.castShadow = true;
+        ventilatorGroup.add(ventBody);
+
+        const ventFace = roundedBox(0.64, 0.42, 0.035, 0.028, ventDarkMat);
+        ventFace.position.set(0.08, 1.24, 0.19);
+        ventilatorGroup.add(ventFace);
+
+        const ventCanvas = document.createElement("canvas");
+        ventCanvas.width = 256;
+        ventCanvas.height = 160;
+        const ventCtx = ventCanvas.getContext("2d");
+        ventCtx.fillStyle = "#071114";
+        ventCtx.fillRect(0, 0, 256, 160);
+        ventCtx.strokeStyle = "rgba(86, 218, 170, 0.12)";
+        for (let x = 0; x < 256; x += 16) {
+          ventCtx.beginPath();
+          ventCtx.moveTo(x, 0);
+          ventCtx.lineTo(x, 160);
+          ventCtx.stroke();
+        }
+        for (let y = 0; y < 160; y += 16) {
+          ventCtx.beginPath();
+          ventCtx.moveTo(0, y);
+          ventCtx.lineTo(256, y);
+          ventCtx.stroke();
+        }
+        ventCtx.fillStyle = "#9fb5bd";
+        ventCtx.font = "900 13px Menlo, monospace";
+        ventCtx.fillText("VENT STANDBY", 14, 12);
+        ventCtx.fillStyle = "#40f39d";
+        ventCtx.font = "900 30px Menlo, monospace";
+        ventCtx.fillText("SIMV", 14, 38);
+        ventCtx.fillStyle = "#ffd166";
+        ventCtx.font = "900 18px Menlo, monospace";
+        ventCtx.fillText("FiO2 40%", 145, 42);
+        ventCtx.fillStyle = "#7dd3fc";
+        ventCtx.fillText("PEEP 5", 145, 68);
+        ventCtx.strokeStyle = "#40f39d";
+        ventCtx.lineWidth = 3;
+        ventCtx.beginPath();
+        ventCtx.moveTo(14, 112);
+        for (let x = 14; x < 240; x += 8) {
+          const y = 114 - Math.max(0, Math.sin((x - 14) * 0.055)) * 42 + Math.sin(x * 0.11) * 2;
+          ventCtx.lineTo(x, y);
+        }
+        ventCtx.stroke();
+        const ventTexture = new THREE.CanvasTexture(ventCanvas);
+        ventTexture.colorSpace = THREE.SRGBColorSpace;
+        const ventScreen = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.58, 0.34),
+          new THREE.MeshBasicMaterial({ map: ventTexture, toneMapped: false, side: THREE.DoubleSide }),
+        );
+        ventScreen.position.set(0.08, 1.24, 0.212);
+        ventilatorGroup.add(ventScreen);
+
+        const knobMat = new THREE.MeshStandardMaterial({ color: 0x7b8f96, roughness: 0.36, metalness: 0.18 });
+        [0.02, 0.13, 0.24].forEach((x) => {
+          const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.018, 20), knobMat);
+          knob.rotation.x = Math.PI / 2;
+          knob.position.set(x, 0.88, 0.195);
+          ventilatorGroup.add(knob);
+        });
+
+        const humidifier = roundedBox(0.28, 0.26, 0.22, 0.045, new THREE.MeshStandardMaterial({ color: 0xcfe9ee, roughness: 0.32, transparent: true, opacity: 0.7 }));
+        humidifier.position.set(0.42, 0.82, 0.12);
+        humidifier.castShadow = true;
+        ventilatorGroup.add(humidifier);
+
+        const waterLine = roundedBox(0.24, 0.035, 0.205, 0.012, new THREE.MeshStandardMaterial({ color: 0x79c7d8, roughness: 0.2, transparent: true, opacity: 0.56 }));
+        waterLine.position.set(0.42, 0.75, 0.13);
+        ventilatorGroup.add(waterLine);
+
+        const ventHook = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.018, 10, 36, Math.PI * 1.35), ventTrimMat);
+        ventHook.position.set(-0.3, 1.72, 0.02);
+        ventHook.rotation.set(0.2, 0.0, -0.4);
+        ventilatorGroup.add(ventHook);
+
+        const circuitA = makeTube([[-3.8, 1.23, -2.18], [-4.06, 1.34, -2.04], [-4.17, 1.16, -1.88], [-4.0, 1.02, -1.84], [-3.7, 1.06, -1.92]], 0xf3fbfd, 0.018, 0.44);
+        const circuitB = makeTube([[-3.66, 1.18, -2.18], [-3.44, 1.28, -2.0], [-3.49, 1.06, -1.82], [-3.76, 0.94, -1.84], [-3.96, 1.02, -1.96]], 0xe5f4f7, 0.016, 0.4);
+        const circuitY = roundedBox(0.16, 0.08, 0.11, 0.02, new THREE.MeshStandardMaterial({ color: 0xe9f2f3, roughness: 0.38 }));
+        circuitY.position.set(-3.88, 1.03, -1.9);
+        circuitY.rotation.y = -0.6;
+        scene.add(circuitY);
+
+        for (let i = 0; i < 4; i += 1) {
+          const caster = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 20), ventDarkMat);
+          caster.rotation.z = Math.PI / 2;
+          caster.position.set(i < 2 ? -0.28 : 0.28, 0.0, i % 2 ? -0.2 : 0.2);
+          ventilatorGroup.add(caster);
+        }
+
+        ventilatorGroup.traverse((child) => {
+          if (child.isMesh) registerInteractive(child, "iv");
+        });
+        registerInteractive(circuitA, "iv");
+        registerInteractive(circuitB, "iv");
+        registerInteractive(circuitY, "iv");
 
 
 
@@ -2076,9 +2693,9 @@
         registerInteractive(chartHeader, "chart");
 
         const cartGroup = new THREE.Group();
-        cartGroup.position.set(-2.35, 0.14, 0.72);
-        cartGroup.rotation.y = 0.18;
-        cartGroup.scale.setScalar(0.86);
+        cartGroup.position.set(1.52, 0.14, -1.82);
+        cartGroup.rotation.y = -Math.PI / 2 + 0.12;
+        cartGroup.scale.setScalar(1.02);
         scene.add(cartGroup);
 
         const cartFrameMaterial = new THREE.MeshStandardMaterial({ color: 0xe9f0f3, roughness: 0.55, metalness: 0.04 });
@@ -2523,7 +3140,7 @@
         registerInteractive(laptopHotspot, "emr");
 
         const patientHotspot = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.82, 36), hotspotMaterial);
-        patientHotspot.position.set(-0.68, 1.02, 0.82);
+        patientHotspot.position.set(-0.68, 1.02, headwallBedZ(0.82));
         patientHotspot.rotation.x = -Math.PI / 2;
         scene.add(patientHotspot);
         registerInteractive(patientHotspot, "patient");
@@ -2604,8 +3221,11 @@
           oxygenMask.position.z = patientHeadAnchor.position.z;
           oxygenMask.rotation.z = -0.12 + patientModelRoot.rotation.z * 0.08;
           ecgPads.forEach((pad, index) => {
-            pad.position.y = [1.57, 1.57, 1.52][index] + breathingMotion * (0.38 + index * 0.05);
-            pad.rotation.z = restlessnessMotion * 0.22;
+            const [baseX, baseY, baseZ] = ecgPadBasePositions[index];
+            pad.position.x = baseX + restlessnessMotion * 0.16;
+            pad.position.y = baseY + breathingMotion * (0.3 + index * 0.04) - responsivenessSlump * 0.2;
+            pad.position.z = baseZ + Math.sin(time * 0.46) * cues.restlessness * 0.004;
+            pad.rotation.z = 0.08 + restlessnessMotion * 0.22;
           });
           ivBag.position.y = 2.42 + Math.sin(time * 0.18) * 0.006;
           monitorAlarmBeacon.material.opacity = 0.08 + alarmPulse * 0.74;
@@ -2621,15 +3241,19 @@
           }
 
           const cameraDrift = 0.008 + cues.calm * 0.003;
+          const zoomTarget = new THREE.Vector3(-1.08, 1.34, -1.72);
+          const zoomPosition = new THREE.Vector3(1.38, 1.86, 1.64);
+          const effectiveCameraPosition = baseCameraPosition.clone().lerp(zoomPosition, cameraZoom);
+          const effectiveCameraTarget = baseCameraTarget.clone().lerp(zoomTarget, cameraZoom);
           camera.position.set(
-            baseCameraPosition.x + cameraPan.x + Math.sin(time * 0.08) * cameraDrift,
-            baseCameraPosition.y + cameraPan.y + Math.sin(time * 0.11 + 1.4) * cameraDrift * 0.55,
-            baseCameraPosition.z + Math.cos(time * 0.07) * cameraDrift,
+            effectiveCameraPosition.x + cameraPan.x + Math.sin(time * 0.08) * cameraDrift,
+            effectiveCameraPosition.y + cameraPan.y + Math.sin(time * 0.11 + 1.4) * cameraDrift * 0.55,
+            effectiveCameraPosition.z + Math.cos(time * 0.07) * cameraDrift,
           );
           camera.lookAt(
-            baseCameraTarget.x + cameraPan.x + Math.sin(time * 0.06) * 0.01,
-            baseCameraTarget.y + cameraPan.y * 0.72 + Math.sin(time * 0.05 + 0.6) * 0.006,
-            baseCameraTarget.z,
+            effectiveCameraTarget.x + cameraPan.x + Math.sin(time * 0.06) * 0.01,
+            effectiveCameraTarget.y + cameraPan.y * 0.72 + Math.sin(time * 0.05 + 0.6) * 0.006,
+            effectiveCameraTarget.z,
           );
 
           renderer.render(scene, camera);
@@ -2643,6 +3267,6 @@
         }
       }
     </script>
-    <script src="./script.js?v=prototype4-gbs6"></script>
+    <script src="./script.js?v=prototype4-gbs16"></script>
   </body>
 </html>

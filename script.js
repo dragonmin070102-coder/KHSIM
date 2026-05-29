@@ -124,11 +124,11 @@ const wardWorkflowHandoff = [
 ];
 
 const gbsHandoff = [
-  { label: "703호", text: "상행성 weakness로 GBS 의심되어 입원한 환자입니다. 다리 힘 빠짐이 어제보다 올라오는 느낌이라고 합니다." },
-  { label: "호흡", text: "SpO₂는 아직 크게 나쁘지 않지만 말이 짧아지고 기침 힘이 약해졌다는 보호자 말이 있습니다." },
-  { label: "연하", text: "물 마실 때 사레가 들릴 뻔했고 침 삼키기가 조금 어렵다고 말했습니다." },
+  { label: "703호", text: "상행성 weakness로 GBS 의심되어 입원한 환자입니다. 발저림과 다리 힘 빠짐이 어제보다 위로 올라오는 느낌이라고 합니다." },
+  { label: "호흡", text: "SpO₂는 96-97%로 괜찮아 보이지만 말이 짧아지고 얕게 숨쉬며 기침 힘이 약해졌다는 보호자 말이 있습니다." },
+  { label: "연하", text: "침 삼키기가 불편하고 물 마실 때 사레가 들릴 뻔했습니다. drooling, dysphagia, weak cough를 직접 확인해야 합니다." },
   { label: "자율신경", text: "BP와 HR이 들쭉날쭉합니다. GBS dysautonomia 가능성을 염두에 두고 ECG와 BP를 계속 보세요." },
-  { label: "핵심", text: "GBS는 SpO₂만 정상이어도 안전하지 않습니다. VC, EtCO₂, ABGA, cough/swallow, reflex 변화를 함께 봐야 합니다." },
+  { label: "핵심", text: "GBS는 산소화보다 환기 저하가 먼저 보일 수 있습니다. SpO₂ 정상에 속지 말고 VC, EtCO₂, PaCO₂, cough/swallow를 묶어 판단하세요." },
 ];
 
 const patient = {
@@ -162,20 +162,47 @@ const patient = {
   ],
 };
 
+function gbsAbgaResults() {
+  const gbs = state.gbsWorkflow || {};
+  const vitals = typeof currentVitals === "function" ? currentVitals() : { spo2: 97 };
+  const etco2 = Math.round(gbs.etco2 || 44);
+  const paCo2 = Math.round(etco2 + 5);
+  const paO2 = Math.round(Math.max(68, Math.min(108, (gbs.oxygenApplied || state.oxygenApplied ? 96 : 88) - Math.max(0, paCo2 - 45) * 0.45)));
+  const pH = Math.max(7.22, Math.min(7.44, 7.40 - Math.max(0, paCo2 - 40) * 0.0075));
+  const hco3 = Math.round(24 + Math.max(0, paCo2 - 45) * 0.12);
+  const saO2 = Math.round(vitals.spo2 || 97);
+  const rows = [
+    { name: "pH", value: pH.toFixed(2), numeric: pH, unit: "", normal: "7.35-7.45", low: 7.35, high: 7.45 },
+    { name: "PaCO₂", value: paCo2, numeric: paCo2, unit: "mmHg", normal: "35-45", low: 35, high: 45 },
+    { name: "PaO₂", value: paO2, numeric: paO2, unit: "mmHg", normal: "80-100", low: 80, high: 100 },
+    { name: "HCO₃⁻", value: hco3, numeric: hco3, unit: "mEq/L", normal: "22-26", low: 22, high: 26 },
+    { name: "SaO₂", value: saO2, numeric: saO2, unit: "%", normal: "95-100", low: 95, high: 100 },
+    { name: "Base excess", value: -1, numeric: -1, unit: "mEq/L", normal: "-2 to +2", low: -2, high: 2 },
+    { name: "Lactate", value: "1.3", numeric: 1.3, unit: "mmol/L", normal: "0.5-2.0", low: 0.5, high: 2.0 },
+  ];
+  return rows.map((row) => ({
+    ...row,
+    status: row.numeric > row.high ? "high" : row.numeric < row.low ? "low" : "normal",
+  }));
+}
+
 function currentPatientProfile() {
   if (state.currentEpisode === "gbsRespiratory") {
+    const abga = gbsAbgaResults();
+    const ph = abga.find((item) => item.name === "pH");
+    const paCo2 = abga.find((item) => item.name === "PaCO₂");
     return {
       name: "Park Sung-min",
       age: 46,
       diagnosis: "GBS 의심 · ascending weakness",
-      chiefComplaint: "다리 힘 빠짐, 손발 저림, 말 짧아짐",
+      chiefComplaint: "다리 힘 빠짐, 손발 저림, 말 짧아짐, 약한 기침",
       plannedSurgery: "수술 계획 없음 · respiratory/ICU escalation 감시",
       pod: "신경계 병동 703호 · 입원 초기",
       weightKg: 72,
       labs: [
-        { name: "ABGA", value: "pending", unit: "", flag: "Watch", normal: "PaCO₂ 35-45" },
-        { name: "VC", value: Math.round(state.gbsWorkflow?.vc || 28), unit: "mL/kg", flag: "Trend", normal: "> 20 mL/kg" },
-        { name: "EtCO₂", value: Math.round(state.gbsWorkflow?.etco2 || 36), unit: "mmHg", flag: "Watch", normal: "35-45" },
+        { name: "ABGA", value: state.gbsWorkflow?.abgaChecked ? `pH ${ph.value} / PaCO₂ ${paCo2.value}` : "pending", unit: state.gbsWorkflow?.abgaChecked ? "mmHg" : "", flag: state.gbsWorkflow?.abgaChecked ? "High" : "Watch", normal: "pH 7.35-7.45 · PaCO₂ 35-45" },
+        { name: "VC", value: Math.round(state.gbsWorkflow?.vc || 24), unit: "mL/kg", flag: "Trend", normal: "> 20 mL/kg" },
+        { name: "EtCO₂", value: Math.round(state.gbsWorkflow?.etco2 || 44), unit: "mmHg", flag: "Watch", normal: "35-45" },
       ],
       regularOrders: [
         { id: "gbs-monitor", label: "Continuous ECG/NIBP/SpO₂ monitoring" },
@@ -202,17 +229,17 @@ const episodes = {
   },
   wardWorkflow: {
     id: "wardWorkflow",
-    title: "Ward Workflow – Acting Nurse Mode",
+    title: "급성 흉통 환자 간호 - 액팅 간호사 모드",
     patientName: "601호 환자",
-    patientSummary: "병동 신규 간호사 역할 · subtle deterioration · 차지 협업",
+    patientSummary: "급성 흉통 환자 · 액팅 간호사 역할 · 차지 협업",
     difficulty: "중급",
     status: "available",
   },
   gbsRespiratory: {
     id: "gbsRespiratory",
-    title: "GBS 호흡근 악화 감지",
+    title: "GBS 호흡근 악화 감지 - SpO₂ 함정",
     patientName: "박성민",
-    patientSummary: "46세 남성 · GBS 의심 · 상행성 weakness와 호흡근 위험",
+    patientSummary: "46세 남성 · GBS 의심 · SpO₂ 정상 속 CO₂ 저류 위험",
     difficulty: "중급-상급",
     status: "available",
   },
@@ -1284,15 +1311,15 @@ const scenes = {
     ],
   },
   gbsIntro: {
-    title: "703호 GBS 의심 환자",
+    title: "GBS SpO₂ 함정",
     text:
-      "환자는 다리 힘이 빠지고 손발 저림이 올라오는 느낌을 말합니다. SpO₂는 아직 괜찮아 보여도 GBS에서는 VC, EtCO₂, cough/swallow, reflex, BP/HR fluctuation을 함께 봐야 합니다.",
+      "환자는 다리 힘이 빠지고 손발 저림이 올라오는 느낌을 말합니다. SpO₂는 아직 정상처럼 보여도 말이 짧고 기침 힘이 약합니다. VC, EtCO₂, cough/swallow, reflex를 먼저 확인하세요.",
     actions: [],
   },
   gbsDeterioration: {
-    title: "호흡근 악화 전조",
+    title: "산소화는 괜찮아 보여도 환기가 무너지는 중",
     text:
-      "환자의 말이 짧아지고 기침 힘이 약합니다. SpO₂만 보면 안심하기 쉽지만 VC와 EtCO₂는 이미 나빠지는 흐름입니다.",
+      "환자의 한 문장이 짧아지고 얕은 호흡이 보입니다. SpO₂만 보면 안심하기 쉽지만 VC는 떨어지고 EtCO₂는 오르는 흐름입니다.",
     actions: [],
   },
   gbsEscalationNotify: {
@@ -1304,7 +1331,7 @@ const scenes = {
   gbsGoodEnd: {
     title: "GBS respiratory escalation 평가",
     text:
-      "SpO₂만 보지 않고 respiratory muscle failure 전조와 bulbar/autonomic 위험을 조기에 묶어 ICU escalation이 진행되었습니다.",
+      "SpO₂ 정상이라는 함정에 속지 않고 respiratory muscle failure 전조와 bulbar/autonomic 위험을 조기에 묶어 ICU escalation이 진행되었습니다.",
     actions: [
       {
         label: "다시 시도",
@@ -1316,7 +1343,7 @@ const scenes = {
   gbsBadEnd: {
     title: "GBS respiratory escalation 평가",
     text:
-      "GBS 환자에서 호흡근 악화와 aspiration/dysautonomia warning이 늦게 인지되었습니다. SpO₂ 정상만으로 안심하면 안 됩니다.",
+      "SpO₂가 정상처럼 보이는 동안 호흡근 악화와 aspiration/dysautonomia warning이 늦게 인지되었습니다. GBS에서는 산소화보다 환기 저하를 먼저 의심해야 합니다.",
     actions: [
       {
         label: "다시 시도",
@@ -1985,7 +2012,7 @@ function setupWardWorkflowEpisode() {
   state.eventHistory = [];
   state.outcome = null;
   state.elapsedMinutes = 0;
-  addLog("Ward Workflow 시작: 601호 bedside monitor가 이미 연결되어 있습니다. 파형과 환자 상태를 근거로 차지에게 보고하세요.", "good");
+  addLog("급성 흉통 액팅 모드 시작: 601호 bedside monitor가 이미 연결되어 있습니다. 파형과 환자 상태를 근거로 차지에게 보고하세요.", "good");
 }
 
 function setupGbsEpisode() {
@@ -2001,8 +2028,8 @@ function setupGbsEpisode() {
   state.oxygenApplied = false;
   state.patientStatus = {
     pain: 1,
-    anxiety: 58,
-    breathing: 64,
+    anxiety: 54,
+    breathing: 58,
     cooperation: 66,
   };
   state.knownPatientInfo = {
@@ -2019,7 +2046,7 @@ function setupGbsEpisode() {
   state.outcome = null;
   state.elapsedMinutes = 0;
   state.wardObjectScoreMarks = {};
-  addLog("GBS 에피소드 시작: SpO₂만 보지 말고 호흡근, cough/swallow, VC, EtCO₂와 자율신경 변화를 추적하세요.", "good");
+  addLog("GBS 에피소드 시작: SpO₂는 아직 괜찮아 보입니다. 하지만 짧은 문장, weak cough, dysphagia, VC 하락, EtCO₂ 상승이 핵심 cue입니다.", "good");
 }
 
 function openEpisodeLobby() {
@@ -2179,6 +2206,20 @@ function markAssessmentComplete(assessmentId) {
   return true;
 }
 
+function recordEmrNursingNote(label, value, interpretation = "", type = "assessment") {
+  if (isGbsEpisode()) {
+    recordGbsAssessment(type, label, value, interpretation);
+    return;
+  }
+
+  if (!state.patientFindings) state.patientFindings = {};
+  const key = "note-" + label.toLowerCase().replace(/[^a-z0-9가-힣]+/gi, "-").replace(/^-|-$/g, "") + "-" + state.elapsedMinutes;
+  state.patientFindings[key] = {
+    label,
+    value: interpretation ? value + " · " + interpretation : value,
+  };
+}
+
 function isAssessmentComplete(assessmentId) {
   return Boolean(assessmentId && state.completedAssessments?.[assessmentId]);
 }
@@ -2252,13 +2293,13 @@ function isWardWorkflowEpisode() {
 
 function createGbsWorkflowState() {
   return {
-    respiratoryStrength: 82,
-    bulbarFunction: 78,
-    autonomicStability: 78,
-    weaknessLevel: 36,
-    reflexLoss: 38,
-    vc: 28,
-    etco2: 36,
+    respiratoryStrength: 74,
+    bulbarFunction: 67,
+    autonomicStability: 72,
+    weaknessLevel: 42,
+    reflexLoss: 44,
+    vc: 24,
+    etco2: 44,
     abgaChecked: false,
     vcChecked: false,
     coughSwallowChecked: false,
@@ -3244,7 +3285,26 @@ function handleClinicalTargetClick(target) {
     return true;
   }
 
-  if (isGbsEpisode() && ["patient", "monitor", "iv", "charge", "communication", "wallOxygen", "wallSuction"].includes(target)) {
+  if (!state.activeTool && target === "emr") {
+    openEmr(isGbsEpisode() ? "notes" : "summary");
+    return true;
+  }
+
+  if (!state.activeTool && target === "monitor") {
+    if (!state.monitorOn && !state.ekgAttached) {
+      if (isGbsEpisode() || isWardWorkflowEpisode()) {
+        state.monitorOn = true;
+        state.ekgAttached = true;
+      } else {
+        startBedsideEcgWorkflow("침상 모니터 클릭");
+        return true;
+      }
+    }
+    renderEcgMonitoringOverlay("review");
+    return true;
+  }
+
+  if (isGbsEpisode() && ["patient", "monitor", "iv", "charge", "communication", "wallOxygen", "wallSuction", "emr", "chart"].includes(target)) {
     return false;
   }
 
@@ -3259,21 +3319,6 @@ function handleClinicalTargetClick(target) {
 
   if (!state.activeTool && target === "communication") {
     openPhysicianContact();
-    return true;
-  }
-
-  if (!state.activeTool && target === "emr") {
-    openEmr("summary");
-    return true;
-  }
-
-  if (!state.activeTool && target === "monitor" && !state.monitorOn && !state.ekgAttached) {
-    startBedsideEcgWorkflow("침상 모니터 클릭");
-    return true;
-  }
-
-  if (!state.activeTool && target === "monitor") {
-    renderEcgMonitoringOverlay("review");
     return true;
   }
 
@@ -3405,22 +3450,31 @@ const wardClinicalInteractionMenus = {
 const gbsClinicalInteractionMenus = {
   patient: {
     title: "GBS 환자 bedside 사정",
-    role: "상행성 weakness, reflex 감소, cough/swallow, shallow breathing을 직접 확인합니다.",
+    role: "상행성 weakness 다음에 호흡근/연하 단서가 따라오는지 확인합니다. 짧은 문장, shallow breathing, drooling을 놓치지 마세요.",
     actions: [
       { id: "gbsMotor", label: "상하지 motor strength와 weakness progression 확인" },
       { id: "gbsReflex", label: "DTR/reflex 감소 확인" },
       { id: "gbsCoughSwallow", label: "weak cough, drooling, dysphagia 확인" },
+      { id: "gbsVc", label: "bedside spirometry로 vital capacity 측정" },
       { id: "gbsAspiration", label: "aspiration precaution 적용" },
     ],
   },
   monitor: {
-    title: "GBS 호흡/자율신경 모니터",
-    role: "SpO₂ 정상 여부보다 VC, EtCO₂, ABGA, ECG/BP fluctuation을 묶어 판단합니다.",
+    title: "GBS 침상 모니터",
+    role: "실제 모니터에서 SpO₂, ECG, NIBP, EtCO₂ 숫자와 capnogram을 확인합니다. PaCO₂는 EMR 검사 결과에서 확인하세요.",
     actions: [
-      { id: "gbsVc", label: "vital capacity 측정" },
-      { id: "gbsMonitor", label: "EtCO₂, ECG, BP fluctuation 관찰" },
-      { id: "gbsAbga", label: "ABGA 확인 준비" },
-      { id: "expandEcg", label: "모니터 화면 확대 관찰 (VC/EtCO₂ 포함)" },
+      { id: "expandEcg", label: "모니터 화면 확대해서 파형/수치 보기" },
+      { id: "gbsMonitor", label: "EtCO₂ 수치와 capnogram 기록" },
+      { id: "gbsMonitor", label: "SpO₂/ECG/BP fluctuation 기록" },
+    ],
+  },
+  emr: {
+    title: "EMR 검사 결과",
+    role: "ABGA/PaCO₂는 모니터가 아니라 검사 결과에서 확인합니다.",
+    actions: [
+      { id: "openLabs", label: "검사 탭 열기" },
+      { id: "gbsAbga", label: "ABGA PaCO₂ 결과 확인/기록" },
+      { id: "openNotes", label: "GBS 사정 기록 확인" },
     ],
   },
   iv: {
@@ -3540,13 +3594,13 @@ function performGbsObjectAction(actionId) {
   }
 
   const logById = {
-    gbsMotor: "신경 사정: 상행성 weakness progression을 확인했습니다.",
+    gbsMotor: "신경 사정: 상행성 weakness를 확인했습니다. 이제 호흡근 침범 단서를 찾아야 합니다.",
     gbsReflex: "신경 사정: DTR/reflex 감소를 확인했습니다.",
-    gbsCoughSwallow: "bulbar 사정: weak cough, drooling/dysphagia 위험을 확인했습니다.",
+    gbsCoughSwallow: "bulbar 사정: 짧은 문장, weak cough, drooling/dysphagia 위험을 확인했습니다.",
     gbsAspiration: "airway 중재: aspiration precaution을 적용했습니다.",
     gbsVc: "호흡근 사정: vital capacity를 측정했습니다.",
-    gbsMonitor: "모니터 해석: EtCO₂, ECG, BP fluctuation을 확인했습니다.",
-    gbsAbga: "검사 준비: ABGA로 CO₂ retention 여부를 확인합니다.",
+    gbsMonitor: "모니터 해석: SpO₂는 정상처럼 보이지만 EtCO₂ 상승과 BP/HR fluctuation을 확인했습니다.",
+    gbsAbga: "검사 준비: ABGA로 PaCO₂ 상승 여부를 확인합니다.",
     gbsSuction: "airway 준비: suction과 airway cart를 준비했습니다.",
     gbsWallOxygen: "벽 산소: flowmeter를 연결하고 산소 적용을 시작했습니다.",
     gbsCallCharge: "차지 호출: GBS respiratory failure 전조를 묶어 보고했습니다.",
@@ -3982,6 +4036,49 @@ function renderEmr() {
     </section>
   `;
 
+  const abgaResults = isGbsEpisode() ? gbsAbgaResults() : [];
+  const abgaMarkup = isGbsEpisode() ? `
+    <article class="emr-card abga-card">
+      <div class="abga-card-header">
+        <div>
+          <h3>ABGA 검사 결과</h3>
+          <p>동맥혈가스분석 결과지 형식입니다. 정상범위보다 낮으면 파란색, 높으면 빨간색으로 표시됩니다.</p>
+        </div>
+        <span class="abga-time">${state.gbsWorkflow?.abgaChecked ? `T+${state.elapsedMinutes} min 확인` : "검사결과 대기"}</span>
+      </div>
+      <table class="abga-table">
+        <thead>
+          <tr>
+            <th>검사항목</th>
+            <th>결과</th>
+            <th>단위</th>
+            <th>참고치</th>
+            <th>판정</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${abgaResults.map((item) => `
+            <tr class="${item.status}">
+              <td><strong>${item.name}</strong></td>
+              <td class="abga-value">${item.value}</td>
+              <td>${item.unit || "-"}</td>
+              <td>${item.normal}</td>
+              <td><span class="abga-flag">${item.status === "high" ? "높음" : item.status === "low" ? "낮음" : "정상"}</span></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <div class="abga-legend">
+        <span class="abga-legend-low">낮음</span>
+        <span class="abga-legend-normal">정상</span>
+        <span class="abga-legend-high">높음</span>
+      </div>
+      <div class="emr-action-row">
+        <button type="button" data-emr-action="gbsAbgaRecord">ABGA 결과 간호기록에 반영</button>
+      </div>
+    </article>
+  ` : "";
+
   const labsMarkup = `
     <section class="emr-table-wrap">
       <table class="emr-table">
@@ -3991,6 +4088,7 @@ function renderEmr() {
         </tbody>
       </table>
     </section>
+    ${abgaMarkup}
   `;
 
   const ordersMarkup = `
@@ -4052,6 +4150,14 @@ function renderEmr() {
 
   const gbs = state.gbsWorkflow || {};
   const gbsRecords = state.gbsAssessmentRecords || [];
+  const nonGbsAssessmentRecords = !isGbsEpisode()
+    ? patientFindingsList().map((item, index) => ({
+        minute: state.elapsedMinutes,
+        label: item.label || "사정 기록",
+        value: item.value || "",
+        interpretation: index === 0 ? "환자 사정/수치 확인 결과가 EMR nursing note에 누적됩니다." : "",
+      }))
+    : [];
   const gbsAssessmentMarkup = isGbsEpisode() ? `
       <article class="emr-card emr-notes neuro-assessment-note">
         <h3>GBS 신경/호흡 사정 기록</h3>
@@ -4075,10 +4181,25 @@ function renderEmr() {
         </ul>
       </article>
   ` : "";
+  const generalAssessmentMarkup = !isGbsEpisode() ? `
+      <article class="emr-card emr-notes neuro-assessment-note">
+        <h3>간호 사정/수치 기록</h3>
+        <ul class="emr-list neuro-record-list">
+          ${nonGbsAssessmentRecords.length ? nonGbsAssessmentRecords.map((item) => `
+            <li>
+              <strong>T+${item.minute} min · ${item.label}</strong>
+              <span>${item.value}</span>
+              ${item.interpretation ? `<small>${item.interpretation}</small>` : ""}
+            </li>
+          `).join("") : "<li>아직 기록된 사정/수치 결과가 없습니다.</li>"}
+        </ul>
+      </article>
+  ` : "";
 
   const notesMarkup = `
     <section class="emr-grid emr-notes-grid">
       ${gbsAssessmentMarkup}
+      ${generalAssessmentMarkup}
       <article class="emr-card emr-notes">
         <h3>간호기록</h3>
         <ul class="emr-list">
@@ -4119,6 +4240,11 @@ emrContentEl?.addEventListener("click", (event) => {
   const action = button.dataset.emrAction;
   if (action === "regularMedication") openRegularMedicationWorkflow("EMR 정규 약물 투여");
   if (action === "prnMedication") openPrnMedicationWorkflow("EMR PRN 약물 투여");
+  if (action === "gbsAbgaRecord") {
+    gbsAction("abga");
+    renderEmr();
+    render();
+  }
 });
 
 
@@ -4815,11 +4941,11 @@ function gbsStabilizationReady(actions = gbsReadyActions()) {
 
 function gbsInstruction() {
   const gbs = state.gbsWorkflow || createGbsWorkflowState();
-  if (!gbs.vcChecked) return "차지: SpO₂만 보지 말고 VC 먼저 확인해주세요. 저는 담당의와 ICU 노티 준비할게요.";
-  if (!gbs.monitorReviewed) return "차지: EtCO₂와 ECG/BP fluctuation 계속 봐주세요.";
-  if (!gbs.coughSwallowChecked || !gbs.aspirationPrecaution) return "차지: swallowing과 cough 힘 확인하고 aspiration precaution 잡아주세요.";
-  if (!gbs.abgaChecked) return "차지: ABGA 준비해서 CO₂ retention 확인해주세요.";
-  return "차지: 좋아요. ICU escalation 보고 중이니 VC, EtCO₂, cough/swallow 변화를 계속 업데이트해주세요.";
+  if (!gbs.vcChecked) return "차지: SpO₂가 괜찮아 보여도 GBS는 VC가 먼저 떨어질 수 있어요. VC 먼저 확인해주세요. 저는 담당의와 ICU 노티 준비할게요.";
+  if (!gbs.monitorReviewed) return "차지: SpO₂ 숫자만 보지 말고 EtCO₂ 상승과 ECG/BP fluctuation을 같이 봐주세요.";
+  if (!gbs.coughSwallowChecked || !gbs.aspirationPrecaution) return "차지: 짧은 문장, weak cough, drooling, dysphagia 확인하고 aspiration precaution 잡아주세요.";
+  if (!gbs.abgaChecked) return "차지: ABGA 준비해서 PaCO₂ 상승 여부 확인해주세요.";
+  return "차지: 좋아요. SpO₂ 정상 속 환기 저하 근거를 잡았습니다. ICU escalation 보고 중이니 VC, EtCO₂, cough/swallow 변화를 계속 업데이트해주세요.";
 }
 
 function gbsAction(action) {
@@ -4830,39 +4956,45 @@ function gbsAction(action) {
   if (action === "motor") {
     gbs.motorChecked = true;
     gbs.weaknessLevel = clamp(gbs.weaknessLevel + 2, 0, 100);
-    addLog("상하지 근력 사정: 양측 하지 4-/5, 발목 dorsiflexion 약화. 손 grip은 4+/5입니다. 다음은 reflex와 호흡근 지표를 연결해서 봐야 합니다.", "good");
+    addLog("상하지 근력 사정: 양측 하지 4-/5, 발목 dorsiflexion 약화. 상행성 weakness가 확인됐습니다. 위험 포인트는 다음 단계인 호흡근 침범입니다.", "good");
     recordGbsAssessment("neuro", "Motor strength", "BLE 4-/5, ankle dorsiflexion 약화, grip 4+/5", "상행성 weakness progression 추적 필요");
+    openEmr("notes");
   }
   if (action === "reflex") {
     gbs.reflexChecked = true;
     gbs.reflexLoss = clamp(gbs.reflexLoss + 4, 0, 100);
     addLog("DTR 사정: patellar/ankle reflex가 양측에서 감소했습니다. GBS의 말초신경 침범 근거가 강해졌습니다.", "good");
     recordGbsAssessment("neuro", "DTR/reflex", "Patellar/ankle reflex 양측 감소", "말초신경 탈수초성 변화와 일치");
+    openEmr("notes");
   }
   if (action === "coughSwallow") {
     gbs.coughSwallowChecked = true;
     gbs.bulbarFunction = clamp(gbs.bulbarFunction - 2, 0, 100);
-    addLog("Bulbar 사정: 기침이 약하고 물 삼킬 때 사레 위험을 보입니다. aspiration precaution과 suction 준비를 생각해야 합니다.", "warning");
-    recordGbsAssessment("airway", "Cough/Swallow", "Weak cough, drooling, dysphagia risk", "bulbar weakness 가능성. 흡인 예방과 suction 준비 필요");
+    addLog("Bulbar 사정: 한 문장이 짧고 기침이 약합니다. 침 삼킴이 느리고 물 삼킬 때 사레 위험이 있습니다. SpO₂보다 먼저 보이는 호흡근/연하 cue입니다.", "warning");
+    recordGbsAssessment("airway", "Cough/Swallow", "Short sentence, weak cough, drooling, dysphagia risk", "bulbar weakness 가능성. 흡인 예방과 suction 준비 필요");
+    openEmr("notes");
   }
   if (action === "vc") {
     gbs.vcChecked = true;
     gbs.vc = clamp(gbs.vc - 0.4, 12, 32);
-    addLog("Vital capacity 측정: VC " + Math.round(gbs.vc) + " mL/kg. 아직 즉시 intubation 수치는 아니지만 하락 추세면 ICU escalation 근거입니다.", "good");
-    recordGbsAssessment("respiratory", "Vital capacity", Math.round(gbs.vc) + " mL/kg", "SpO₂보다 조기 호흡근 악화 추적에 중요");
+    addLog("Vital capacity 측정: VC " + Math.round(gbs.vc) + " mL/kg. SpO₂가 괜찮아 보여도 호흡근 reserve가 줄어드는 근거입니다.", "good");
+    recordGbsAssessment("respiratory", "Vital capacity", Math.round(gbs.vc) + " mL/kg", "SpO₂보다 먼저 보이는 호흡근 reserve 지표");
+    openEmr("notes");
   }
   if (action === "monitor") {
     gbs.monitorReviewed = true;
     state.monitorOn = true;
     state.ekgAttached = true;
-    addLog("모니터 확인: SpO₂ " + currentVitals().spo2 + "%, EtCO₂ " + Math.round(gbs.etco2) + ", BP/HR fluctuation 관찰 중. SpO₂보다 CO₂와 VC 추세가 중요합니다.", "good");
-    recordGbsAssessment("monitor", "EtCO₂/ECG/BP", "EtCO₂ " + Math.round(gbs.etco2) + " mmHg, BP/HR fluctuation 관찰", "dysautonomia와 CO₂ retention 추적");
+    addLog("모니터 확인: SpO₂ " + currentVitals().spo2 + "%로 안심하기 쉬운 수치지만 EtCO₂ " + Math.round(gbs.etco2) + " mmHg입니다. 산소화보다 환기 저하를 먼저 의심해야 합니다.", "warning");
+    recordGbsAssessment("monitor", "SpO₂/EtCO₂/ECG/BP", "SpO₂ " + currentVitals().spo2 + "%, EtCO₂ " + Math.round(gbs.etco2) + " mmHg, BP/HR fluctuation 관찰", "oxygenation은 보존되어도 ventilation failure가 먼저 진행될 수 있음");
+    openEmr("notes");
   }
   if (action === "abga") {
     gbs.abgaChecked = true;
     gbs.etco2 = clamp(gbs.etco2 + 0.4, 34, 58);
-    addLog("ABGA 준비: PaCO₂ 상승 여부를 확인할 계획입니다. GBS에서는 산소포화도보다 hypoventilation/CO₂ retention을 놓치면 위험합니다.", "good");
-    recordGbsAssessment("lab", "ABGA 준비", "PaCO₂ 상승 여부 확인 예정", "hypoventilation/CO₂ retention 배제 필요");
+    addLog("EMR 검사 확인: ABGA에서 PaCO₂ " + Math.round(gbs.etco2 + 5) + " mmHg로 상승 경향을 확인했습니다. EtCO₂ 상승과 같은 방향입니다.", "good");
+    recordGbsAssessment("lab", "ABGA/PaCO₂", "PaCO₂ " + Math.round(gbs.etco2 + 5) + " mmHg", "모니터 EtCO₂와 함께 hypoventilation/CO₂ retention 근거");
+    openEmr("labs");
   }
   if (action === "aspiration") {
     gbs.aspirationPrecaution = true;
@@ -4870,30 +5002,35 @@ function gbsAction(action) {
     gbs.bulbarFunction = clamp(gbs.bulbarFunction + 3, 0, 100);
     addLog("Aspiration precaution: 침상 머리를 올리고 PO 보류, 삼킴/침 분비를 관찰합니다.", "good");
     recordGbsAssessment("airway", "Aspiration precaution", "HOB 30-45도 상승, PO 보류, 침 분비 관찰", "머리 올림이 3D 침상과 EMR에 반영됨");
+    openEmr("notes");
   }
   if (action === "suction") {
     gbs.suctionReady = true;
     gbs.bulbarFunction = clamp(gbs.bulbarFunction + 2, 0, 100);
     addLog("Suction 준비: weak cough와 drooling에 대비해 suction과 airway cart를 bedside에 준비했습니다.", "good");
     recordGbsAssessment("airway", "Wall suction", "흡인 압력 확인, canister/catheter/airway cart 준비", "weak cough와 drooling 악화 대비");
+    openEmr("notes");
   }
   if (action === "oxygen") {
     gbs.oxygenApplied = true;
     state.oxygenApplied = true;
-    addLog("Wall O₂ 적용: 산소 라인을 연결했습니다. SpO₂ 보정만으로 안심하지 말고 VC/EtCO₂를 계속 봅니다.", "warning");
-    recordGbsAssessment("respiratory", "Wall O₂", "Flowmeter 연결 후 O₂ 적용", "산소는 보조 중재이며 호흡근 평가를 대체하지 않음");
+    addLog("Wall O₂ 적용: 산소 라인을 연결했습니다. SpO₂는 좋아 보일 수 있지만 CO₂ 저류와 호흡근 약화는 그대로 진행될 수 있어 VC/EtCO₂를 계속 봅니다.", "warning");
+    recordGbsAssessment("respiratory", "Wall O₂", "Flowmeter 연결 후 O₂ 적용", "산소는 산소화 보조이며 환기/호흡근 평가를 대체하지 않음");
+    openEmr("notes");
   }
   if (action === "chargeCalled") {
     gbs.chargeCalled = true;
     gbs.chargeAtBedside = true;
     gbs.icuEscalated = true;
     addLog(gbsInstruction(), "good");
-    recordGbsAssessment("communication", "Charge call", "GBS respiratory failure 전조를 묶어 보고", "차지 bedside 도착 및 ICU/담당의 escalation 시작");
+    recordGbsAssessment("communication", "Charge call", "SpO₂ 정상 속 VC 하락, EtCO₂ 상승, weak cough/dysphagia를 묶어 보고", "차지 bedside 도착 및 ICU/담당의 escalation 시작");
+    openEmr("notes");
   }
   if (action === "updateCharge") {
     gbs.updatedCharge = true;
-    addLog("차지 업데이트: 최신 VC " + gbs.vc + " mL/kg, EtCO₂ " + gbs.etco2 + ", cough/swallow 변화를 전달했습니다.", "good");
+    addLog("차지 업데이트: SpO₂ 정상에 가려진 최신 VC " + Math.round(gbs.vc) + " mL/kg, EtCO₂ " + Math.round(gbs.etco2) + ", cough/swallow 변화를 전달했습니다.", "good");
     recordGbsAssessment("communication", "Charge update", "VC " + Math.round(gbs.vc) + " mL/kg, EtCO₂ " + Math.round(gbs.etco2) + " mmHg, cough/swallow 상태 전달", "ICU escalation 중 최신 bedside 정보 공유");
+    openEmr("notes");
   }
   if (action === "waited") {
     gbs.waitedTicks += 1;
@@ -4926,15 +5063,15 @@ function tickGbsState() {
   const inActiveGbsStage = ["gbsIntro", "gbsDeterioration", "gbsEscalationNotify"].includes(state.stage);
   if (!inActiveGbsStage) return;
 
-  const monitorRelief = gbs.monitorReviewed ? 0.28 : 0;
-  const airwayRelief = (gbs.aspirationPrecaution ? 0.22 : 0) + (gbs.suctionReady ? 0.18 : 0);
-  const escalationRelief = gbs.chargeCalled ? 0.32 : 0;
-  gbs.respiratoryStrength = clamp(gbs.respiratoryStrength - 0.72 + monitorRelief + airwayRelief + escalationRelief, 0, 100);
-  gbs.bulbarFunction = clamp(gbs.bulbarFunction - 0.52 + airwayRelief, 0, 100);
-  gbs.autonomicStability = clamp(gbs.autonomicStability - 0.48 + monitorRelief * 0.25, 0, 100);
-  gbs.weaknessLevel = clamp(gbs.weaknessLevel + 0.42, 0, 100);
-  gbs.vc = clamp(gbs.vc - 0.16 - Math.max(0, 60 - gbs.respiratoryStrength) / 85, 10, 32);
-  gbs.etco2 = clamp(gbs.etco2 + 0.18 + Math.max(0, 58 - gbs.respiratoryStrength) / 70, 34, 60);
+  const monitorRelief = gbs.monitorReviewed ? 0.24 : 0;
+  const airwayRelief = (gbs.aspirationPrecaution ? 0.2 : 0) + (gbs.suctionReady ? 0.16 : 0);
+  const escalationRelief = gbs.chargeCalled ? 0.28 : 0;
+  gbs.respiratoryStrength = clamp(gbs.respiratoryStrength - 0.54 + monitorRelief + airwayRelief + escalationRelief, 0, 100);
+  gbs.bulbarFunction = clamp(gbs.bulbarFunction - 0.42 + airwayRelief, 0, 100);
+  gbs.autonomicStability = clamp(gbs.autonomicStability - 0.36 + monitorRelief * 0.25, 0, 100);
+  gbs.weaknessLevel = clamp(gbs.weaknessLevel + 0.34, 0, 100);
+  gbs.vc = clamp(gbs.vc - 0.12 - Math.max(0, 62 - gbs.respiratoryStrength) / 95, 10, 32);
+  gbs.etco2 = clamp(gbs.etco2 + 0.22 + Math.max(0, 62 - gbs.respiratoryStrength) / 82, 34, 60);
   gbs.notificationTicks += gbs.chargeCalled ? 1 : 0;
   state.elapsedMinutes += 1;
 
@@ -4942,8 +5079,8 @@ function tickGbsState() {
   const actions = gbsReadyActions();
   if (gbs.chargeCalled && gbs.notificationTicks % 2 === 1) addLog(gbsInstruction(), urgency.level === "critical" ? "warning" : "good");
 
-  if (urgency.level === "critical" && state.elapsedMinutes >= 10 && (!gbs.chargeCalled || gbs.waitedTicks >= 2 || gbs.vc <= 13 || gbs.etco2 >= 54)) {
-    setGbsOutcome("deteriorated", "GBS 호흡근 악화가 늦게 인지되어 impending respiratory failure로 진행했습니다.", [
+  if (urgency.level === "critical" && state.elapsedMinutes >= 13 && (!gbs.chargeCalled || gbs.waitedTicks >= 2 || gbs.vc <= 12 || gbs.etco2 >= 56)) {
+    setGbsOutcome("deteriorated", "SpO₂ 정상에 가려진 GBS 호흡근 악화가 늦게 인지되어 impending respiratory failure로 진행했습니다.", [
       "VC " + Math.round(gbs.vc) + " mL/kg",
       "EtCO₂ " + Math.round(gbs.etco2),
       "weak cough/swallow와 dysautonomia 지속",
@@ -4952,7 +5089,7 @@ function tickGbsState() {
   }
 
   if (gbs.chargeCalled && gbs.notificationTicks >= 3 && gbsStabilizationReady(actions) && urgency.level !== "critical") {
-    setGbsOutcome("stabilized", "호흡근 악화 전조를 조기에 묶어 보고하고 ICU escalation 준비가 진행되었습니다.", [
+    setGbsOutcome("stabilized", "SpO₂가 유지되는 동안 VC/EtCO₂/cough-swallow 단서를 조기에 묶어 보고하고 ICU escalation 준비가 진행되었습니다.", [
       "VC/EtCO₂/ABGA 추적",
       "aspiration precaution과 suction 준비",
       "ECG/BP fluctuation monitoring",
@@ -5060,6 +5197,7 @@ function handlePatientAssessmentFinding(findingKey) {
   applyScore(firstFinding ? config.score : {});
   applyPatientImpact(firstFinding ? config.patient : {});
   addLog(config.log, firstFinding ? "good" : "warning");
+  recordEmrNursingNote(config.finding.label, config.finding.value, "bedside 직접 사정으로 기록됨", config.assessment || "assessment");
   render();
   return true;
 }
@@ -5115,6 +5253,7 @@ function handlePatientMenuAction(actionId) {
     applyScore(firstAssessment ? { clinical: 3, empathy: 1 } : {});
     applyPatientImpact(firstAssessment ? { anxiety: -1, cooperation: 1 } : {});
     addLog("통증 사정: NRS " + state.patientStatus.pain + "/10, 불안 " + Math.round(state.patientStatus.anxiety) + ". " + patientSubjectiveResponse(), firstAssessment ? "good" : "warning");
+    recordEmrNursingNote("통증 사정", "NRS " + state.patientStatus.pain + "/10, 불안 " + Math.round(state.patientStatus.anxiety), patientSubjectiveResponse(), "pain");
     render();
     return;
   }
@@ -5133,6 +5272,7 @@ function handlePatientMenuAction(actionId) {
     {
       const vitals = currentVitals();
       addLog("활력징후 사정: HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%, BP " + vitals.bp + ", 호흡 " + breathingLabel(state.patientStatus.breathing) + ". " + patientSubjectiveResponse(), firstAssessment ? "good" : "warning");
+      recordEmrNursingNote("활력징후", "HR " + vitals.hr + ", SpO₂ " + vitals.spo2 + "%, BP " + vitals.bp, "호흡 " + breathingLabel(state.patientStatus.breathing), "vitals");
     }
     render();
     return;
@@ -5296,26 +5436,26 @@ function renderEcgMonitoringOverlay(mode = "review") {
   const gbs = isGbsEpisode() ? (state.gbsWorkflow || createGbsWorkflowState()) : null;
   const neuroMetrics = gbs
     ? "<div class=\"device-neuro-strip\">" +
-        "<span>VC <strong>" + Math.round(gbs.vc) + "</strong> mL/kg</span>" +
         "<span>EtCO₂ <strong>" + Math.round(gbs.etco2) + "</strong> mmHg</span>" +
+        "<span>SpO₂ <strong>" + vitals.spo2 + "</strong>%</span>" +
+        "<span>NIBP <strong>" + vitals.bp + "</strong></span>" +
         "<span>Cough/Swallow <strong>" + (gbs.bulbarFunction <= 62 ? "WEAK" : "WATCH") + "</strong></span>" +
-        "<span>BP/HR <strong>" + (gbs.autonomicStability <= 58 ? "LABILE" : "WATCH") + "</strong></span>" +
       "</div>"
     : "";
   shell.innerHTML =
     "<div class=\"bedside-device-bezel\">" +
       "<div class=\"device-monitor-screen\">" +
-        "<div class=\"device-monitor-header\"><span>KHSIM PACU-ICU</span><strong>" + (mode === "started" ? "MONITORING ACTIVE" : "BEDSIDE MONITOR") + "</strong><small>II  x1.0  NIBP AUTO</small></div>" +
+        "<div class=\"device-monitor-header\"><span>KHSIM INTELLIVUE</span><strong>" + (mode === "started" ? "MONITORING ACTIVE" : "BEDSIDE MONITOR") + "</strong><small>" + (gbs ? "II  SpO₂  CO₂  NIBP" : "II  x1.0  NIBP AUTO") + "</small></div>" +
         "<div class=\"device-monitor-grid\">" +
           "<section class=\"device-wave-stack\" aria-label=\"bedside monitor waveforms\">" +
             "<div class=\"device-wave-row ecg\"><span>ECG II</span><svg viewBox=\"0 0 520 86\" role=\"img\" aria-label=\"ECG waveform\"><polyline points=\"0,47 42,47 54,40 64,47 82,47 94,16 104,70 118,47 166,47 178,39 190,47 236,47 248,18 260,68 276,47 326,47 338,39 350,47 398,47 410,17 422,70 438,47 486,47 498,39 520,47\" /></svg></div>" +
             "<div class=\"device-wave-row pleth\"><span>SpO2 PLETH</span><svg viewBox=\"0 0 520 72\" role=\"img\" aria-label=\"SpO2 pleth waveform\"><polyline points=\"" + plethPoints + "\" /></svg></div>" +
-            "<div class=\"device-wave-row resp\"><span>RESP</span><svg viewBox=\"0 0 520 64\" role=\"img\" aria-label=\"respiratory waveform\"><polyline points=\"0,42 28,40 58,35 88,27 118,22 148,25 178,34 208,42 238,44 268,41 298,35 328,27 358,22 388,25 418,34 448,42 478,44 520,41\" /></svg></div>" +
+            "<div class=\"device-wave-row " + (gbs ? "co2" : "resp") + "\"><span>" + (gbs ? "CO₂" : "RESP") + "</span><svg viewBox=\"0 0 520 64\" role=\"img\" aria-label=\"" + (gbs ? "capnogram waveform" : "respiratory waveform") + "\"><polyline points=\"" + (gbs ? "0,52 34,52 52,18 160,16 178,52 224,52 242,19 350,17 368,52 414,52 432,20 520,18" : "0,42 28,40 58,35 88,27 118,22 148,25 178,34 208,42 238,44 268,41 298,35 328,27 358,22 388,25 418,34 448,42 478,44 520,41") + "\" /></svg></div>" +
           "</section>" +
           "<dl class=\"device-vital-bank\" aria-label=\"monitor vital signs\">" +
             "<div class=\"hr " + hrClass + "\"><dt>HR</dt><dd>" + vitals.hr + "<small>bpm</small></dd></div>" +
             "<div class=\"spo2 " + spo2Class + "\"><dt>SpO2</dt><dd>" + vitals.spo2 + "<small>%</small></dd></div>" +
-            "<div class=\"rr " + rrClass + "\"><dt>RR</dt><dd>" + vitals.rr + "<small>/min</small></dd></div>" +
+            (gbs ? "<div class=\"rr " + rrClass + "\"><dt>EtCO2</dt><dd>" + Math.round(gbs.etco2) + "<small>mmHg</small></dd></div>" : "<div class=\"rr " + rrClass + "\"><dt>RR</dt><dd>" + vitals.rr + "<small>/min</small></dd></div>") +
             "<div class=\"bp\"><dt>NIBP</dt><dd>" + vitals.bp + "<small>mmHg</small></dd></div>" +
           "</dl>" +
         "</div>" +
@@ -5330,18 +5470,32 @@ function renderEcgMonitoringOverlay(mode = "review") {
   const rhythm = document.createElement("button");
   rhythm.type = "button";
   rhythm.className = "primary";
-  rhythm.textContent = "리듬/파형 해석";
+  rhythm.textContent = gbs ? "EtCO₂/capnogram 기록" : "리듬/파형 해석";
   rhythm.addEventListener("click", () => {
     closeEcgProcedureOverlay();
-    handleMonitorMenuAction("analyzeWaveform");
+    if (gbs) {
+      gbsAction("monitor");
+      render();
+    } else handleMonitorMenuAction("analyzeWaveform");
   });
 
   const vitalsButton = document.createElement("button");
   vitalsButton.type = "button";
-  vitalsButton.textContent = "모니터 활력 확인";
+  vitalsButton.textContent = gbs ? "SpO₂/ECG/BP 기록" : "모니터 활력 확인";
   vitalsButton.addEventListener("click", () => {
     closeEcgProcedureOverlay();
-    handleMonitorMenuAction("checkVitals");
+    if (gbs) {
+      gbsAction("monitor");
+      render();
+    } else handleMonitorMenuAction("checkVitals");
+  });
+
+  const abgaButton = document.createElement("button");
+  abgaButton.type = "button";
+  abgaButton.textContent = "EMR에서 PaCO₂ 확인";
+  abgaButton.addEventListener("click", () => {
+    closeEcgProcedureOverlay();
+    openEmr("labs");
   });
 
   const close = document.createElement("button");
@@ -5349,7 +5503,8 @@ function renderEcgMonitoringOverlay(mode = "review") {
   close.textContent = "병실 보기";
   close.addEventListener("click", closeEcgProcedureOverlay);
 
-  actions.append(rhythm, vitalsButton, close);
+  if (gbs) actions.append(rhythm, vitalsButton, abgaButton, close);
+  else actions.append(rhythm, vitalsButton, close);
   shell.append(actions);
   ecgProcedureOverlayEl.append(shell);
 }
@@ -5374,10 +5529,10 @@ function handleMonitorMenuAction(actionId) {
     {
       const interpretation = monitorClinicalInterpretation();
       addLog("ECG 해석: " + interpretation.observations.join(" / "), firstReview ? "good" : "warning");
+      recordEmrNursingNote("모니터 확대 확인", interpretation.observations.join(" / "), "bedside monitor 화면에서 확인", "monitor");
     }
     if (isGbsEpisode() && state.gbsWorkflow) {
-      gbsAction("monitor");
-      addLog("모니터 확대: GBS 모드에서는 파형과 함께 VC, EtCO₂, cough/swallow, BP/HR fluctuation을 한 화면에서 추적합니다.", "good");
+      addLog("모니터 확대: 침상 모니터에서 SpO₂, ECG, NIBP, EtCO₂ 숫자와 capnogram을 확인합니다. VC는 bedside spirometry, PaCO₂는 EMR ABGA로 확인하세요.", "good");
     }
     render();
     renderEcgMonitoringOverlay("review");
@@ -5402,6 +5557,7 @@ function handleMonitorMenuAction(actionId) {
     addPostPrnReassessmentLog("vitals");
     applyScore(firstReview ? { safety: 2, clinical: 2 } : {});
     addLog(`모니터 활력징후 확인: HR ${vitals.hr}, SpO₂ ${vitals.spo2}%, BP ${vitals.bp}.`, firstReview ? "good" : "warning");
+    recordEmrNursingNote("모니터 활력징후", `HR ${vitals.hr}, SpO₂ ${vitals.spo2}%, BP ${vitals.bp}`, "침상 모니터에서 확인", "monitor");
     render();
     return;
   }
@@ -5425,6 +5581,7 @@ function handleMonitorMenuAction(actionId) {
     {
       const interpretation = monitorClinicalInterpretation();
       addLog("ECG 파형 분석: " + interpretation.observations.join(" / "), firstReview ? "good" : "warning");
+      recordEmrNursingNote("ECG 파형 분석", interpretation.observations.join(" / "), "침상 모니터에서 확인", "monitor");
     }
     render();
   }
@@ -5527,6 +5684,7 @@ function askHistoryQuestion(question) {
   applyScore(question.score);
   applyPatientImpact(question.patient);
   addLog(`${question.label} → ${question.response}`, question.tone || "good");
+  recordEmrNursingNote(question.label, question.response, "환자 문진 응답", "history");
   render();
 }
 
@@ -6058,8 +6216,9 @@ function currentVitals() {
     const respiratoryLoad = Math.max(0, 72 - gbs.respiratoryStrength);
     const autonomicLoad = Math.max(0, 70 - gbs.autonomicStability);
     const oxygenBoost = gbs.oxygenApplied || state.oxygenApplied ? 2 : 0;
-    const spo2 = clamp(Math.round(97 + oxygenBoost - respiratoryLoad / 8 - Math.max(0, gbs.etco2 - 42) / 5), 88, 99);
-    const rr = clamp(Math.round(17 + respiratoryLoad / 2.7 + Math.max(0, gbs.etco2 - 40) / 2.8), 12, 38);
+    const lateOxygenationDrop = Math.max(0, respiratoryLoad - 18) / 10 + Math.max(0, gbs.etco2 - 50) / 5;
+    const spo2 = clamp(Math.round(97 + oxygenBoost - lateOxygenationDrop), 88, 99);
+    const rr = clamp(Math.round(17 + respiratoryLoad / 3.2 + Math.max(0, gbs.etco2 - 42) / 2.4), 12, 38);
     const hrSwing = autonomicLoad >= 18 && state.elapsedMinutes % 3 === 0 ? -34 : autonomicLoad * 0.95;
     const hr = clamp(Math.round(88 + hrSwing + respiratoryLoad * 0.25), 42, 138);
     const systolicSwing = autonomicLoad >= 16 && state.elapsedMinutes % 2 === 0 ? 22 : -autonomicLoad * 0.72;
@@ -6229,12 +6388,12 @@ function createClinicalActionPrompt(scene) {
       text: "차지가 의사에게 전화하는 동안 repeat BP, SpO₂, IV, mental change를 계속 업데이트하세요.",
     },
     gbsIntro: {
-      title: "GBS 핵심 함정",
-      text: "SpO₂가 아직 정상이어도 안심하지 마세요. 환자와 모니터를 클릭해 VC, EtCO₂, cough/swallow, reflex 변화를 확인하세요.",
+      title: "SpO₂ 정상이라는 함정",
+      text: "산소포화도가 괜찮아 보여도 환기 저하가 먼저 올 수 있습니다. 환자와 모니터를 클릭해 짧은 문장, weak cough, VC, EtCO₂를 확인하세요.",
     },
     gbsDeterioration: {
-      title: "호흡근 악화 감지",
-      text: "말이 짧아지고 기침 힘이 약해집니다. airway 준비, aspiration precaution, ABGA, 차지 호출을 이어가세요.",
+      title: "환기 저하를 잡아내세요",
+      text: "말이 짧아지고 기침 힘이 약해집니다. SpO₂ 대신 EtCO₂/PaCO₂/VC를 근거로 airway 준비, aspiration precaution, 차지 호출을 이어가세요.",
     },
     gbsEscalationNotify: {
       title: "ICU escalation 중",
@@ -6302,17 +6461,17 @@ function createGbsBedsideHelp() {
   const helper = document.createElement("div");
   helper.className = "ward-help-card";
   const stageGuide = {
-    gbsIntro: "GBS에서는 SpO₂가 늦게 떨어질 수 있습니다. 먼저 호흡근과 bulbar sign을 찾으세요.",
-    gbsDeterioration: "말이 짧아지고 cough가 약해지면 VC/EtCO₂/ABGA와 airway 준비가 우선입니다.",
-    gbsEscalationNotify: "차지 노티 중에도 VC, EtCO₂, cough/swallow, BP/HR fluctuation을 업데이트하세요.",
+    gbsIntro: "GBS에서는 SpO₂가 늦게 떨어질 수 있습니다. 짧은 문장, shallow breathing, weak cough를 먼저 찾으세요.",
+    gbsDeterioration: "모니터에서는 EtCO₂/capnogram을, EMR에서는 ABGA PaCO₂를, bedside에서는 VC와 cough/swallow를 확인하세요.",
+    gbsEscalationNotify: "차지 노티 중에도 SpO₂ 정상 속 VC, EtCO₂, cough/swallow, BP/HR fluctuation을 업데이트하세요.",
   };
   const checklist = [
-    ["Motor", actions.motor, "환자 클릭"],
-    ["Reflex", actions.reflex, "환자 클릭"],
-    ["Cough/Swallow", actions.coughSwallow, "환자 클릭"],
-    ["VC", actions.vc, "모니터 클릭"],
-    ["EtCO₂/ECG/BP", actions.etco2, "모니터 클릭"],
-    ["ABGA", actions.abga, "모니터 클릭"],
+    ["상행성 weakness", actions.motor, "환자 클릭"],
+    ["Reflex 감소", actions.reflex, "환자 클릭"],
+    ["짧은 문장/삼킴", actions.coughSwallow, "환자 클릭"],
+    ["VC", actions.vc, "환자 bedside spirometry"],
+    ["SpO₂+EtCO₂", actions.etco2, "침상 모니터 확대"],
+    ["PaCO₂ 확인", actions.abga, "EMR 검사 탭"],
     ["Wall O₂", actions.oxygen, "벽 산소 아웃렛 클릭"],
     ["Aspiration", actions.aspiration, "환자 클릭"],
     ["Suction", actions.suction, "벽 suction 또는 airway 준비 클릭"],
@@ -6326,7 +6485,7 @@ function createGbsBedsideHelp() {
     "<ul>" + checklist.map(([label, done, hint]) =>
       "<li class=\"" + (done ? "done" : "pending") + "\"><span>" + (done ? "완료" : "다음") + "</span><strong>" + label + "</strong><small>" + hint + "</small></li>"
     ).join("") + "</ul>" +
-    "<p class=\"ward-help-next\">SpO₂ " + vitals.spo2 + "%만 보고 안심하지 말고 VC/EtCO₂와 cough-swallow를 묶어 보고하세요.</p>";
+    "<p class=\"ward-help-next\">현재 SpO₂ " + vitals.spo2 + "%입니다. 이 숫자가 정상이어도 VC " + Math.round(gbs.vc) + ", EtCO₂ " + Math.round(gbs.etco2) + "이면 환기 저하를 의심하세요.</p>";
   return helper;
 }
 
@@ -6870,20 +7029,20 @@ function renderEvaluation() {
   if (isGbsEpisode()) {
     const gbsActions = state.outcome?.actions || gbsReadyActions();
     const gbsItems = [
-      ["Motor strength", gbsActions.motor],
-      ["DTR/reflex", gbsActions.reflex],
-      ["Cough/swallow", gbsActions.coughSwallow],
-      ["Vital capacity", gbsActions.vc],
-      ["EtCO₂/ECG/BP", gbsActions.etco2],
-      ["ABGA", gbsActions.abga],
+      ["상행성 weakness", gbsActions.motor],
+      ["DTR/reflex 감소", gbsActions.reflex],
+      ["짧은 문장/cough/swallow", gbsActions.coughSwallow],
+      ["VC로 호흡근 reserve 확인", gbsActions.vc],
+      ["SpO₂ 정상 속 EtCO₂ 확인", gbsActions.etco2],
+      ["ABGA/PaCO₂ 확인", gbsActions.abga],
       ["Aspiration precaution", gbsActions.aspiration],
       ["Suction 준비", gbsActions.suction],
       ["Escalation", gbsActions.charge],
       ["최신 업데이트", gbsActions.updateCharge],
     ];
     const note = state.outcome?.type === "stabilized"
-      ? "SpO₂만 보지 않고 respiratory muscle failure 전조를 조기에 묶어 escalation했습니다."
-      : "GBS에서는 SpO₂가 정상처럼 보여도 VC/EtCO₂/cough-swallow가 먼저 무너질 수 있습니다.";
+      ? "SpO₂ 정상이라는 함정에 속지 않고 VC/EtCO₂/cough-swallow로 respiratory muscle failure 전조를 조기에 묶어 escalation했습니다."
+      : "GBS에서는 SpO₂가 정상처럼 보여도 VC/EtCO₂/cough-swallow가 먼저 무너질 수 있습니다. 산소화보다 환기 저하를 먼저 의심해야 합니다.";
 
     evaluationBodyEl.innerHTML = `
       ${createOutcomeSummary()}
@@ -6948,9 +7107,9 @@ function render() {
   renderClinicalData();
   if (scenarioLabelEl) {
     scenarioLabelEl.textContent = isGbsEpisode()
-      ? "GBS respiratory watch"
+      ? "GBS SpO₂ 함정 시나리오"
       : isWardWorkflowEpisode()
-        ? "Ward workflow mode"
+        ? "흉통 액팅 간호사 모드"
         : "ACS bedside scenario";
   }
   scoreEl.textContent = "Score " + averageScore();
