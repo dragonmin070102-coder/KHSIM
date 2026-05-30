@@ -273,12 +273,18 @@
     <script type="module">
       import * as THREE from "./assets/vendor/three.module.js";
       import { GLTFLoader } from "./assets/vendor/GLTFLoader.js";
+      import { RoomEnvironment } from "./assets/vendor/RoomEnvironment.js";
+      import { EffectComposer } from "./assets/vendor/EffectComposer.js";
+      import { RenderPass } from "./assets/vendor/RenderPass.js";
+      import { UnrealBloomPass } from "./assets/vendor/UnrealBloomPass.js";
+      import { OutputPass } from "./assets/vendor/OutputPass.js";
 
       const container = document.querySelector("#three-container");
 
       if (container) {
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xdce8ec);
+        scene.background = new THREE.Color(0xd4e0e5);
+        scene.fog = new THREE.FogExp2(0xd4e0e5, 0.018);
 
         const camera = new THREE.PerspectiveCamera(39, 1, 0.1, 100);
         const baseCameraPosition = new THREE.Vector3(3.42, 2.32, 4.18);
@@ -314,19 +320,37 @@
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.0;
+        renderer.toneMappingExposure = 0.96;
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.domElement.classList.add("three-room-canvas");
         container.append(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xf4f8fb, 0.72);
+        // ── RoomEnvironment: PBR 반사/앰비언트 환경맵 ──────────────────────
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+        scene.environmentIntensity = 0.42;
+        pmremGenerator.dispose();
+
+        // ── Post-processing: Bloom ──────────────────────────────────────────
+        const composer = new EffectComposer(renderer);
+        composer.addPass(new RenderPass(scene, camera));
+        const bloomPass = new UnrealBloomPass(
+          new THREE.Vector2(window.innerWidth, window.innerHeight),
+          0.14,   // strength — 형광등/모니터만 살짝
+          0.44,   // radius
+          0.88,   // threshold — 밝은 것만 bloom
+        );
+        composer.addPass(bloomPass);
+        composer.addPass(new OutputPass());
+
+        const ambientLight = new THREE.AmbientLight(0xf4f8fb, 0.48);
         scene.add(ambientLight);
 
-        const roomHemisphere = new THREE.HemisphereLight(0xf8fff8, 0x5e6d68, 0.62);
+        const roomHemisphere = new THREE.HemisphereLight(0xfdfff8, 0x8a9da4, 0.44);
         scene.add(roomHemisphere);
 
-        const directionalLight = new THREE.DirectionalLight(0xfffbf3, 1.35);
+        const directionalLight = new THREE.DirectionalLight(0xfffbf3, 1.1);
         directionalLight.position.set(1.4, 6.4, 2.6);
         directionalLight.castShadow = true;
         directionalLight.shadow.mapSize.set(2048, 2048);
@@ -378,20 +402,29 @@
           context.fillRect(0, 0, 256, 256);
 
           if (kind === "floor") {
-            const tileSize = 32;
+            // 60×60 cm 병원 비닐 타일 스타일
+            const tileSize = 64;
             for (let ty = 0; ty < 256; ty += tileSize) {
               for (let tx = 0; tx < 256; tx += tileSize) {
-                const shade = 0.92 + Math.random() * 0.12;
-                context.fillStyle = `rgb(${Math.round(188*shade)},${Math.round(205*shade)},${Math.round(212*shade)})`;
+                const shade = 0.95 + Math.random() * 0.08;
+                const r = Math.round(210 * shade), g = Math.round(218 * shade), b = Math.round(222 * shade);
+                context.fillStyle = `rgb(${r},${g},${b})`;
                 context.fillRect(tx + 1, ty + 1, tileSize - 2, tileSize - 2);
-                for (let g = 0; g < 16; g++) {
-                  context.fillStyle = `rgba(72,96,108,${Math.random() * 0.06})`;
-                  context.fillRect(tx + 1 + Math.random() * (tileSize - 2), ty + 1 + Math.random() * (tileSize - 2), 1, 1);
+                // 타일 내부 미세 노이즈
+                for (let n = 0; n < 28; n++) {
+                  const nx = tx + 2 + Math.random() * (tileSize - 4);
+                  const ny = ty + 2 + Math.random() * (tileSize - 4);
+                  context.fillStyle = `rgba(140,158,168,${Math.random() * 0.08})`;
+                  context.fillRect(nx, ny, 2, 1);
                 }
+                // 타일 내 미세 광택 하이라이트
+                context.fillStyle = `rgba(255,255,255,${0.04 + Math.random() * 0.06})`;
+                context.fillRect(tx + 8, ty + 8, tileSize * 0.35, tileSize * 0.35);
               }
             }
-            context.strokeStyle = "rgba(140,162,172,0.58)";
-            context.lineWidth = 1.8;
+            // 줄눈 (grout lines)
+            context.strokeStyle = "rgba(168,182,190,0.75)";
+            context.lineWidth = 2.2;
             for (let x = 0; x <= 256; x += tileSize) {
               context.beginPath(); context.moveTo(x, 0); context.lineTo(x, 256); context.stroke();
             }
@@ -461,7 +494,7 @@
 
         const floor = new THREE.Mesh(
           new THREE.PlaneGeometry(12, 9),
-          new THREE.MeshStandardMaterial({ color: 0xdae7eb, map: floorTexture, roughness: 0.78, metalness: 0.07 }),
+          new THREE.MeshStandardMaterial({ color: 0xd8e4e8, map: floorTexture, roughness: 0.48, metalness: 0.04, envMapIntensity: 0.6 }),
         );
         floor.rotation.x = -Math.PI / 2;
         floor.receiveShadow = true;
@@ -655,7 +688,7 @@
         scene.add(ceilingMesh);
 
         // Fluorescent ceiling light fixtures
-        const fluorescentGlowMat  = new THREE.MeshBasicMaterial({ color: 0xfffef0, transparent: true, opacity: 0.88 });
+        const fluorescentGlowMat  = new THREE.MeshStandardMaterial({ color: 0xfffef0, emissive: 0xfff8e0, emissiveIntensity: 1.4, roughness: 1.0, metalness: 0 });
         const fluorescentFrameMat = new THREE.MeshStandardMaterial({ color: 0xd6e0e4, roughness: 0.56 });
         [[-1.1, 0.15], [1.65, 0.15]].forEach(([fx, fz]) => {
           const glowPanel = new THREE.Mesh(new THREE.PlaneGeometry(1.68, 0.36), fluorescentGlowMat);
@@ -862,7 +895,7 @@
           scene.add(swBtn);
         });
 
-        const ceilingPanelMaterial = new THREE.MeshBasicMaterial({ color: 0xfffbf0, transparent: true, opacity: 0.36 });
+        const ceilingPanelMaterial = new THREE.MeshStandardMaterial({ color: 0xfffbf0, emissive: 0xfff8e0, emissiveIntensity: 1.1, roughness: 1.0, metalness: 0 });
         const ceilingLightPanel = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), ceilingPanelMaterial);
         ceilingLightPanel.position.set(-0.8, 3.05, -0.7);
         ceilingLightPanel.rotation.x = -Math.PI / 2;
@@ -972,13 +1005,30 @@
         const obLip = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.022, 0.014), new THREE.MeshStandardMaterial({ color: 0xb4c4ca, roughness: 0.5 }));
         obLip.position.set(1.50, 1.078, 0.12);
         scene.add(obLip);
-        // Paper cup on table
-        const patCup = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.022, 0.018, 0.078, 12),
-          new THREE.MeshStandardMaterial({ color: 0xeef8fb, roughness: 0.72 }),
+        // 생수병 (환자 침상 흔한 인테리어)
+        const waterBottleMat = new THREE.MeshStandardMaterial({ color: 0xd6edf4, roughness: 0.18, metalness: 0.0, transparent: true, opacity: 0.78 });
+        const waterBottle = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.024, 0.18, 14), waterBottleMat);
+        waterBottle.position.set(1.62, 1.168, 0.30);
+        waterBottle.castShadow = true;
+        scene.add(waterBottle);
+        // 병 라벨
+        const bottleLabel = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.0265, 0.0265, 0.072, 14),
+          new THREE.MeshStandardMaterial({ color: 0x8ec8e0, roughness: 0.62 }),
         );
-        patCup.position.set(1.60, 1.104, 0.28);
-        scene.add(patCup);
+        bottleLabel.position.set(1.62, 1.158, 0.30);
+        scene.add(bottleLabel);
+        // 병 뚜껑
+        const bottleCap = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.018, 10), new THREE.MeshStandardMaterial({ color: 0x3a8fa8, roughness: 0.44 }));
+        bottleCap.position.set(1.62, 1.269, 0.30);
+        scene.add(bottleCap);
+        // 약컵 (작은 플라스틱 컵)
+        const medCup = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.018, 0.014, 0.042, 10),
+          new THREE.MeshStandardMaterial({ color: 0xfff8e8, roughness: 0.64, transparent: true, opacity: 0.88 }),
+        );
+        medCup.position.set(1.50, 1.083, 0.22);
+        scene.add(medCup);
 
         // ── VISITOR CHAIR ─────────────────────────────────────────────────────
         const vChairFabric = new THREE.MeshStandardMaterial({ color: 0x4a7a8a, roughness: 0.84 });
@@ -1020,22 +1070,7 @@
           cap.position.set(x, 3.265, 1.08);
           scene.add(cap);
         });
-        // Curtain panel (partially drawn, hospital blue-white)
-        const curtainMat = new THREE.MeshStandardMaterial({
-          color: 0xd8eaf2, roughness: 0.92,
-          transparent: true, opacity: 0.40,
-          side: THREE.DoubleSide,
-        });
-        const curtainPanel = new THREE.Mesh(new THREE.PlaneGeometry(2.85, 2.22), curtainMat);
-        curtainPanel.position.set(-1.32, 2.155, 1.072);
-        scene.add(curtainPanel);
-        // Curtain hooks
-        for (let i = 0; i < 7; i++) {
-          const hook = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.004, 6, 12), ctMat);
-          hook.position.set(-2.20 + i * 0.50, 3.258, 1.072);
-          hook.rotation.x = Math.PI / 2;
-          scene.add(hook);
-        }
+        // 커튼 패널 제거 (레일 트랙은 유지)
 
         // ── EMERGENCY CALL BUTTON ─────────────────────────────────────────────
         const callBtnMat = new THREE.MeshStandardMaterial({ color: 0xd42e2e, roughness: 0.38, metalness: 0.04 });
@@ -1110,6 +1145,16 @@
           scene.add(frameBar);
         });
 
+        // Structural side channel rails running along bed length (below deck)
+        const sideChannelMat = new THREE.MeshStandardMaterial({ color: 0xa2b6be, roughness: 0.36, metalness: 0.32 });
+        [0.43, -1.13].forEach((z) => {
+          const sideChannel = roundedBox(4.28, 0.1, 0.06, 0.022, sideChannelMat);
+          sideChannel.position.set(0.28, 0.74, headwallBedZ(z));
+          orientBedLayoutObject(sideChannel);
+          sideChannel.castShadow = true;
+          scene.add(sideChannel);
+        });
+
         const mattressMaterial = new THREE.MeshStandardMaterial({ color: 0xeef5f7, map: sheetTexture, roughness: 0.92 });
         const mattressTop = roundedBox(4.48, 0.18, 1.49, 0.12, mattressMaterial);
         mattressTop.position.set(0.26, 1.12, headwallBedZ(-0.35));
@@ -1117,6 +1162,15 @@
         mattressTop.castShadow = true;
         mattressTop.receiveShadow = true;
         scene.add(mattressTop);
+
+        // Mattress section seam lines (head / body / foot articulation marks)
+        const seamMat = new THREE.MeshStandardMaterial({ color: 0xbecdd4, roughness: 0.86 });
+        [-0.5, 1.0].forEach((x) => {
+          const seam = roundedBox(0.016, 0.20, 1.49, 0.006, seamMat);
+          seam.position.set(x, 1.215, headwallBedZ(-0.35));
+          orientBedLayoutObject(seam);
+          scene.add(seam);
+        });
 
         const headBoard = roundedBox(0.22, 1.02, 1.62, 0.075, bedPanelMaterial);
         headBoard.position.set(-2.12, 1.06, headwallBedZ(-0.35));
@@ -1140,6 +1194,35 @@
           boardHandle.castShadow = true;
           scene.add(boardHandle);
         });
+
+        // Headboard integrated U-shaped grab rail
+        const grabRailMat = new THREE.MeshStandardMaterial({ color: 0xbecdd5, metalness: 0.64, roughness: 0.20 });
+        const grabRailTop = roundedBox(0.044, 0.044, 1.50, 0.018, grabRailMat);
+        grabRailTop.position.set(-2.22, 1.74, headwallBedZ(-0.35));
+        orientBedLayoutObject(grabRailTop);
+        grabRailTop.castShadow = true;
+        scene.add(grabRailTop);
+        [0.41, -1.09].forEach((z) => {
+          const grabPost = roundedBox(0.044, 0.22, 0.044, 0.018, grabRailMat);
+          grabPost.position.set(-2.22, 1.64, headwallBedZ(z));
+          orientBedLayoutObject(grabPost);
+          grabPost.castShadow = true;
+          scene.add(grabPost);
+        });
+
+        // Footboard push rail
+        const pushRailBar = roundedBox(0.05, 0.05, 1.46, 0.02, grabRailMat);
+        pushRailBar.position.set(2.67, 1.44, headwallBedZ(-0.35));
+        orientBedLayoutObject(pushRailBar);
+        pushRailBar.castShadow = true;
+        scene.add(pushRailBar);
+        [0.41, -1.09].forEach((z) => {
+          const pushPost = roundedBox(0.05, 0.16, 0.05, 0.02, grabRailMat);
+          pushPost.position.set(2.67, 1.36, headwallBedZ(z));
+          orientBedLayoutObject(pushPost);
+          scene.add(pushPost);
+        });
+
         const bedControlPanel = roundedBox(0.018, 0.3, 0.42, 0.014, new THREE.MeshStandardMaterial({ color: 0x24363d, roughness: 0.4, metalness: 0.08 }));
         bedControlPanel.position.set(2.675, 1.05, headwallBedZ(0.32));
         orientBedLayoutObject(bedControlPanel);
@@ -1164,49 +1247,68 @@
           scene.add(edge);
         });
 
+        // Side guard rails — compact two-bar system, ~18 cm above mattress surface
         const railMaterial = new THREE.MeshStandardMaterial({ color: 0xd7e1e6, metalness: 0.28, roughness: 0.36 });
-        const bedRailNear = roundedBox(3.1, 0.22, 0.088, 0.038, railMaterial);
-        bedRailNear.position.set(0.15, 1.58, headwallBedZ(0.55));
-        orientBedLayoutObject(bedRailNear);
-        bedRailNear.castShadow = true;
-        scene.add(bedRailNear);
-        const bedRailFar = roundedBox(2.95, 0.045, 0.042, 0.016, railMaterial);
-        bedRailFar.position.set(0.58, 0.66, headwallBedZ(-0.96));
-        orientBedLayoutObject(bedRailFar);
-        bedRailFar.castShadow = true;
-        scene.add(bedRailFar);
+        const railAlumMaterial = new THREE.MeshStandardMaterial({ color: 0xe2eaee, metalness: 0.14, roughness: 0.52 });
+        // Near side: upper bar at y=1.40, lower bar at y=1.26 (mattress top ≈ y=1.21)
+        [1.40, 1.26].forEach((y) => {
+          const railBar = roundedBox(3.14, 0.036, 0.036, 0.014, railAlumMaterial);
+          railBar.position.set(0.15, y, headwallBedZ(0.565));
+          orientBedLayoutObject(railBar);
+          railBar.castShadow = true;
+          scene.add(railBar);
+        });
         [-1.15, 0.15, 1.45].forEach((x) => {
-          const railPost = roundedBox(0.06, 0.86, 0.06, 0.02, railMaterial);
-          railPost.position.set(x, 1.19, headwallBedZ(0.55));
+          const railPost = roundedBox(0.04, 0.16, 0.04, 0.015, railAlumMaterial);
+          railPost.position.set(x, 1.33, headwallBedZ(0.565));
           orientBedLayoutObject(railPost);
           railPost.castShadow = true;
           scene.add(railPost);
         });
-        [-0.78, 0.18, 1.12, 1.92].forEach((x) => {
-          const railPost = roundedBox(0.03, 0.055, 0.03, 0.01, railMaterial);
-          railPost.position.set(x, 0.64, headwallBedZ(-0.96));
-          orientBedLayoutObject(railPost);
-          railPost.castShadow = true;
-          scene.add(railPost);
+        // Far side: same heights
+        [1.40, 1.26].forEach((y) => {
+          const railBarFar = roundedBox(3.14, 0.036, 0.036, 0.014, railAlumMaterial);
+          railBarFar.position.set(0.15, y, headwallBedZ(-0.975));
+          orientBedLayoutObject(railBarFar);
+          railBarFar.castShadow = true;
+          scene.add(railBarFar);
+        });
+        [-1.15, 0.15, 1.45].forEach((x) => {
+          const railPostFar = roundedBox(0.04, 0.16, 0.04, 0.015, railAlumMaterial);
+          railPostFar.position.set(x, 1.33, headwallBedZ(-0.975));
+          orientBedLayoutObject(railPostFar);
+          railPostFar.castShadow = true;
+          scene.add(railPostFar);
         });
 
-        const bedCasterMaterial = new THREE.MeshStandardMaterial({ color: 0x202a2f, roughness: 0.48, metalness: 0.1 });
-        const casterForkMaterial = new THREE.MeshStandardMaterial({ color: 0x9badb5, roughness: 0.34, metalness: 0.42 });
+        // Casters — larger, more realistic with stem + fork + wheel
+        const bedCasterMaterial = new THREE.MeshStandardMaterial({ color: 0x1a2328, roughness: 0.44, metalness: 0.12 });
+        const casterForkMaterial = new THREE.MeshStandardMaterial({ color: 0x9badb5, roughness: 0.30, metalness: 0.52 });
+        const brakeMat = new THREE.MeshStandardMaterial({ color: 0xd64a3a, roughness: 0.48 });
         [-1.72, 1.85].forEach((x) => {
           [0.41, -1.06].forEach((z) => {
-            const fork = roundedBox(0.13, 0.12, 0.04, 0.012, casterForkMaterial);
-            fork.position.set(x, 0.43, headwallBedZ(z));
+            // Vertical stem
+            const stem = roundedBox(0.058, 0.26, 0.058, 0.018, casterForkMaterial);
+            stem.position.set(x, 0.46, headwallBedZ(z));
+            orientBedLayoutObject(stem);
+            stem.castShadow = true;
+            scene.add(stem);
+            // Fork housing — taller
+            const fork = roundedBox(0.18, 0.16, 0.06, 0.018, casterForkMaterial);
+            fork.position.set(x, 0.30, headwallBedZ(z));
             orientBedLayoutObject(fork);
             fork.castShadow = true;
             scene.add(fork);
-            const caster = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.022, 10, 24), bedCasterMaterial);
-            caster.position.set(x, 0.36, headwallBedZ(z));
+            // Wheel — larger radius
+            const caster = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.028, 12, 28), bedCasterMaterial);
+            caster.position.set(x, 0.28, headwallBedZ(z));
             caster.rotation.y = Math.PI / 2;
             orientBedLayoutObject(caster);
             caster.castShadow = true;
             scene.add(caster);
-            const brake = roundedBox(0.09, 0.018, 0.035, 0.006, new THREE.MeshStandardMaterial({ color: 0xd64a3a, roughness: 0.5 }));
-            brake.position.set(x + 0.055, 0.43, headwallBedZ(z));
+            // Brake lever
+            const brake = roundedBox(0.12, 0.022, 0.038, 0.007, brakeMat);
+            brake.position.set(x + 0.068, 0.32, headwallBedZ(z));
             orientBedLayoutObject(brake);
             scene.add(brake);
           });
@@ -2699,7 +2801,7 @@
         // ═══ 간호카트 (Korean Nursing Cart) ═══════════════════════
         const cartGroup = new THREE.Group();
         cartGroup.position.set(1.52, 0.14, -1.82);
-        cartGroup.rotation.y = -Math.PI / 2 + 0.12;
+        cartGroup.rotation.y = 0.12;
         scene.add(cartGroup);
 
         const ncBodyMat   = new THREE.MeshStandardMaterial({ color: 0xedf3f6, roughness: 0.52, metalness: 0.03 });
@@ -2905,72 +3007,79 @@
         }
 
         // SBAR phone — bedside cabinet top surface (cabinet top at y≈0.910)
+        // ── NURSE CALL HANDSET — 벽걸이 너스콜 (간결한 소형 유닛) ─────────────
         const phoneGroup = new THREE.Group();
-        phoneGroup.position.set(2.88, 0.930, -0.54);
-        phoneGroup.rotation.y = 1.58;
+        // 헤드월 쪽 가까운 측벽에 마운트, 환자 손이 닿는 높이
+        phoneGroup.position.set(-1.58, 1.62, 1.04);
+        phoneGroup.rotation.y = Math.PI;
         scene.add(phoneGroup);
 
-        const phonePlastic = new THREE.MeshStandardMaterial({ color: 0x202b31, roughness: 0.62, metalness: 0.03 });
-        const phoneRubber = new THREE.MeshStandardMaterial({ color: 0x11191d, roughness: 0.78 });
-        const phoneButtonMaterial = new THREE.MeshStandardMaterial({ color: 0xd9e2e6, roughness: 0.5 });
-        const phoneScreenMaterial = new THREE.MeshBasicMaterial({ map: makeDeviceScreenTexture("phone") });
+        const phonePlastic = new THREE.MeshStandardMaterial({ color: 0xdce8ec, roughness: 0.54, metalness: 0.04 });
+        const phoneRubber  = new THREE.MeshStandardMaterial({ color: 0x2a3c44, roughness: 0.74 });
+        const phoneAccent  = new THREE.MeshStandardMaterial({ color: 0x3b8fa0, roughness: 0.42, metalness: 0.08 });
 
-        const phoneBase = roundedBox(0.78, 0.11, 0.48, 0.055, phonePlastic);
-        phoneBase.castShadow = true;
-        phoneBase.receiveShadow = true;
-        phoneGroup.add(phoneBase);
-        registerInteractive(phoneBase, "communication");
+        // 벽마운트 베이스 패널
+        const ncBase = roundedBox(0.18, 0.28, 0.038, 0.016, phonePlastic);
+        ncBase.castShadow = true;
+        phoneGroup.add(ncBase);
+        registerInteractive(ncBase, "communication");
 
-        const phoneCradle = roundedBox(0.58, 0.04, 0.18, 0.04, phoneRubber);
-        phoneCradle.position.set(-0.02, 0.075, -0.12);
-        phoneCradle.castShadow = true;
-        phoneGroup.add(phoneCradle);
-        registerInteractive(phoneCradle, "communication");
+        // 상단 스피커 그릴 슬릿
+        for (let i = 0; i < 4; i++) {
+          const slit = roundedBox(0.11, 0.006, 0.014, 0.003, phoneRubber);
+          slit.position.set(0, 0.088 - i * 0.018, 0.022);
+          phoneGroup.add(slit);
+        }
 
-        const handset = roundedBox(0.62, 0.08, 0.15, 0.07, phoneRubber);
-        handset.position.set(-0.02, 0.135, -0.13);
-        handset.rotation.z = -0.04;
-        handset.castShadow = true;
-        phoneGroup.add(handset);
-        registerInteractive(handset, "communication");
+        // 작은 LED 표시등
+        const ncLed = new THREE.Mesh(
+          new THREE.SphereGeometry(0.009, 8, 8),
+          new THREE.MeshStandardMaterial({ color: 0x44dd88, emissive: 0x44dd88, emissiveIntensity: 1.2 }),
+        );
+        ncLed.position.set(0.06, 0.10, 0.023);
+        phoneGroup.add(ncLed);
 
-        [-0.28, 0.24].forEach((x) => {
-          const handsetCap = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.082, 0.045, 22), phoneRubber);
-          handsetCap.position.set(x, 0.135, -0.13);
-          handsetCap.rotation.z = Math.PI / 2;
-          handsetCap.castShadow = true;
-          phoneGroup.add(handsetCap);
+        // 너스콜 버튼 (큼직한 빨간 버튼)
+        const ncCallBtn = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.028, 0.028, 0.014, 16),
+          new THREE.MeshStandardMaterial({ color: 0xe03030, roughness: 0.36, metalness: 0.04 }),
+        );
+        ncCallBtn.rotation.x = Math.PI / 2;
+        ncCallBtn.position.set(0, -0.02, 0.026);
+        phoneGroup.add(ncCallBtn);
+        registerInteractive(ncCallBtn, "communication");
+
+        // 버튼 라벨 링
+        const ncBtnRing = new THREE.Mesh(
+          new THREE.TorusGeometry(0.032, 0.005, 8, 20),
+          new THREE.MeshStandardMaterial({ color: 0xcc2828, roughness: 0.38 }),
+        );
+        ncBtnRing.rotation.x = Math.PI / 2;
+        ncBtnRing.position.set(0, -0.02, 0.025);
+        phoneGroup.add(ncBtnRing);
+
+        // 볼륨/취소 소형 버튼 2개
+        [[-0.05, -0.09], [0.05, -0.09]].forEach(([bx, by]) => {
+          const smBtn = roundedBox(0.032, 0.018, 0.012, 0.006, phoneAccent);
+          smBtn.position.set(bx, by, 0.024);
+          phoneGroup.add(smBtn);
         });
 
-        const phoneDisplay = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.16), phoneScreenMaterial);
-        phoneDisplay.position.set(0.14, 0.062, 0.07);
-        phoneDisplay.rotation.x = -Math.PI / 2;
-        phoneGroup.add(phoneDisplay);
-        registerInteractive(phoneDisplay, "communication");
-
-        for (let row = 0; row < 4; row += 1) {
-          for (let col = 0; col < 3; col += 1) {
-            const key = roundedBox(0.07, 0.018, 0.045, 0.012, phoneButtonMaterial);
-            key.position.set(-0.23 + col * 0.09, 0.068, 0.02 + row * 0.06);
-            key.castShadow = true;
-            phoneGroup.add(key);
-          }
-        }
-
-        const phoneCordPoints = [];
-        for (let i = 0; i <= 28; i += 1) {
-          const t = i / 28;
-          phoneCordPoints.push(new THREE.Vector3(
-            -0.31 - t * 0.38,
-            0.08 + Math.sin(t * Math.PI * 10) * 0.018,
-            -0.1 + t * 0.36,
+        // 코일 코드 → 침대 난간 방향으로
+        const cordPts = [];
+        for (let i = 0; i <= 22; i++) {
+          const t = i / 22;
+          cordPts.push(new THREE.Vector3(
+            -t * 0.12,
+            -0.14 - t * 0.28 + Math.sin(t * Math.PI * 7) * 0.018,
+            0.012 + t * 0.05,
           ));
         }
-        const phoneCord = new THREE.Mesh(
-          new THREE.TubeGeometry(new THREE.CatmullRomCurve3(phoneCordPoints), 64, 0.008, 8, false),
+        const ncCord = new THREE.Mesh(
+          new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cordPts), 48, 0.004, 6, false),
           phoneRubber,
         );
-        phoneGroup.add(phoneCord);
+        phoneGroup.add(ncCord);
 
         chargeNurseGroup = new THREE.Group();
         chargeNurseGroup.name = "charge-nurse";
@@ -3057,7 +3166,7 @@
 
         const laptopGroup = new THREE.Group();
         laptopGroup.position.set(-0.05, 1.13, -0.02);
-        laptopGroup.rotation.y = Math.PI / 2 + 0.04;
+        laptopGroup.rotation.y = 0.04;
         laptopGroup.scale.setScalar(0.70);
         cartGroup.add(laptopGroup);
 
@@ -3191,6 +3300,8 @@
           camera.aspect = width / height;
           camera.updateProjectionMatrix();
           renderer.setSize(width, height, false);
+          composer.setSize(width, height);
+          bloomPass.resolution.set(width, height);
         }
 
         window.addEventListener("resize", resizeRenderer);
@@ -3279,23 +3390,23 @@
             playAlarmTone(cues.alarm, latestUrgency.level);
           }
 
-          const cameraDrift = 0.008 + cues.calm * 0.003;
+          const cameraDrift = 0.004 + cues.calm * 0.002;
           const zoomTarget = new THREE.Vector3(-1.08, 1.34, -1.72);
           const zoomPosition = new THREE.Vector3(1.38, 1.86, 1.64);
           const effectiveCameraPosition = baseCameraPosition.clone().lerp(zoomPosition, cameraZoom);
           const effectiveCameraTarget = baseCameraTarget.clone().lerp(zoomTarget, cameraZoom);
           camera.position.set(
-            effectiveCameraPosition.x + cameraPan.x + Math.sin(time * 0.08) * cameraDrift,
-            effectiveCameraPosition.y + cameraPan.y + Math.sin(time * 0.11 + 1.4) * cameraDrift * 0.55,
-            effectiveCameraPosition.z + Math.cos(time * 0.07) * cameraDrift,
+            effectiveCameraPosition.x + cameraPan.x + Math.sin(time * 0.034) * cameraDrift,
+            effectiveCameraPosition.y + cameraPan.y + Math.sin(time * 0.041 + 1.4) * cameraDrift * 0.5,
+            effectiveCameraPosition.z + Math.cos(time * 0.028) * cameraDrift,
           );
           camera.lookAt(
-            effectiveCameraTarget.x + cameraPan.x + Math.sin(time * 0.06) * 0.01,
-            effectiveCameraTarget.y + cameraPan.y * 0.72 + Math.sin(time * 0.05 + 0.6) * 0.006,
+            effectiveCameraTarget.x + cameraPan.x + Math.sin(time * 0.022) * 0.005,
+            effectiveCameraTarget.y + cameraPan.y * 0.72 + Math.sin(time * 0.019 + 0.6) * 0.003,
             effectiveCameraTarget.z,
           );
 
-          renderer.render(scene, camera);
+          composer.render();
           requestAnimationFrame(animate);
         }
 
