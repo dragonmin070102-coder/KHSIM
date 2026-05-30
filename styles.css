@@ -1866,10 +1866,10 @@ body.emr-open {
 
 .emr-modal.emr-float {
   inset: auto;
-  left: 16px;
-  top: 72px;
-  width: 430px;
-  max-height: calc(100vh - 88px);
+  left: 12px;
+  top: 68px;
+  width: 310px;
+  max-height: calc(100vh - 84px);
   padding: 0;
   background: transparent;
   z-index: 30;
@@ -1885,11 +1885,78 @@ body.emr-open {
 }
 
 .emr-modal.emr-float .emr-shell {
-  width: 430px;
-  max-height: calc(100vh - 88px - 36px); /* subtract drag handle */
+  width: 310px;
+  max-height: calc(100vh - 84px - 34px);
   border-radius: 0 0 10px 10px;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
+}
+
+/* Float 모드 내부 요소 컴팩트 최적화 */
+.emr-modal.emr-float .emr-header {
+  padding: 10px 14px;
+}
+
+.emr-modal.emr-float .emr-header h2 {
+  font-size: 15px;
+}
+
+.emr-modal.emr-float .emr-close {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.emr-modal.emr-float .emr-tabs {
+  padding: 6px 10px;
+  gap: 4px;
+}
+
+.emr-modal.emr-float .emr-tabs button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.emr-modal.emr-float .emr-content {
+  padding: 10px 12px;
+  font-size: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.emr-modal.emr-float .emr-grid {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.emr-modal.emr-float .emr-card {
+  padding: 10px 12px;
+}
+
+.emr-modal.emr-float .emr-card h3 {
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.emr-modal.emr-float .emr-table-wrap {
+  overflow-x: auto;
+}
+
+.emr-modal.emr-float .emr-table th,
+.emr-modal.emr-float .emr-table td {
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.emr-modal.emr-float p,
+.emr-modal.emr-float li,
+.emr-modal.emr-float span {
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 /* Body state when float panel is open — do NOT lock scroll or block canvas */

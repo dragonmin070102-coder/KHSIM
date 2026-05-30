@@ -3961,8 +3961,8 @@ function openEmr(tab = "summary") {
 
   renderEmr();
 
-  // Float panel mode: GBS bedside gameplay (not mandatory chart review step)
-  const useFloat = isGbsEpisode() && state.stage !== "chartReview";
+  // Float panel mode: GBS episode always uses float (no chart-review stage in GBS)
+  const useFloat = isGbsEpisode();
   if (useFloat) {
     if (firstOpen) {
       // Reset drag position to CSS default on each new episode session
