@@ -1542,6 +1542,117 @@ const episodeStartAcsEl = document.querySelector("#episode-start-acs");
 const episodeStartWardEl = document.querySelector("#episode-start-ward");
 const episodeStartGbsEl = document.querySelector("#episode-start-gbs");
 const episodeBackHomeEl = document.querySelector("#episode-back-home");
+const episodeBriefingEl = document.querySelector("#episode-briefing");
+
+// ── Episode briefing data ──────────────────────────────────────────────
+const episodeBriefings = {
+  acs: {
+    epNum: "EP 01",
+    epStatusClass: "episode-card-badge--live",
+    epStatusLabel: "완성",
+    title: "급성 흉통 환자 간호",
+    patientName: "김현수 · 62세 남성",
+    patientSummary: "ACS 의심 · CABG 평가 대기",
+    vitals: "HR 108 · SpO₂ 94% · BP 152/94",
+    objectives: [
+      "야간 인계 후 EMR을 확인하고 침상으로 이동합니다.",
+      "환자 대화, 신체 사정, 모니터 연결, 처방 확인이 핵심 흐름입니다.",
+      "처치 결과에 따라 환자 상태와 SBAR 선택지가 달라집니다.",
+    ],
+    accent: "cardiac",
+    episodeId: "acsChestPain",
+    locked: false,
+  },
+  "ward-workflow": {
+    epNum: "EP 02",
+    epStatusClass: "episode-card-badge--new",
+    epStatusLabel: "신규",
+    title: "액팅 간호사 워크플로우",
+    patientName: "601호 환자",
+    patientSummary: "BP downtrend · SpO₂ 저하 · 처짐 관찰",
+    vitals: "HR 상승 · BP borderline · SpO₂ pleth 약화",
+    objectives: [
+      "이미 모니터가 연결된 상태에서 이상징후를 발견합니다.",
+      "차지에게 보고한 뒤 노티 중에도 bedside 행동을 이어갑니다.",
+      "핵심은 '보고 후 역할' — repeat BP, SpO₂, mental status 지속 추적입니다.",
+    ],
+    accent: "ward",
+    episodeId: "wardWorkflow",
+    locked: false,
+  },
+  gbs: {
+    epNum: "EP 03",
+    epStatusClass: "episode-card-badge--new",
+    epStatusLabel: "신규",
+    title: "GBS · SpO₂ 함정",
+    patientName: "박성민 · 46세 남성",
+    patientSummary: "GBS 의심 · ascending weakness · CO₂ 저류 위험",
+    vitals: "SpO₂ 96-97% (함정) · EtCO₂ 44 mmHg 상승 중",
+    objectives: [
+      "SpO₂ 정상에 속지 말고 VC, EtCO₂, cough/swallow를 먼저 확인합니다.",
+      "bulbar weakness와 aspiration risk를 bedside에서 직접 사정합니다.",
+      "호흡근 악화 근거를 묶어 ICU escalation을 조기에 시작합니다.",
+    ],
+    accent: "neuro",
+    episodeId: "gbsRespiratory",
+    locked: false,
+  },
+  "cardiac-arrest": {
+    epNum: "EP 04",
+    epStatusClass: "episode-card-badge--soon",
+    epStatusLabel: "준비 중",
+    title: "심정지 대응 · Code Blue",
+    patientName: "개발 예정",
+    patientSummary: "CPR · 리듬 판독 · 제세동 · 팀 역할",
+    vitals: "개발 예정",
+    objectives: [
+      "CPR 시작과 팀 역할 분담을 실시간으로 훈련합니다.",
+      "리듬 판독, 제세동 타이밍, 약물 투여 흐름을 다룹니다.",
+      "Code Blue 상황에서의 의사소통과 기록을 연습합니다.",
+    ],
+    accent: "code",
+    episodeId: null,
+    locked: true,
+  },
+};
+
+let selectedEpisodeCard = "acs";
+
+function renderEpisodeBriefing(cardId) {
+  const data = episodeBriefings[cardId];
+  if (!data || !episodeBriefingEl) return;
+
+  document.querySelector("#briefing-ep-num").textContent = data.epNum;
+  const statusEl = document.querySelector("#briefing-ep-status");
+  statusEl.textContent = data.epStatusLabel;
+  statusEl.className = "episode-card-badge " + data.epStatusClass;
+
+  document.querySelector("#briefing-title").textContent = data.title;
+  document.querySelector("#briefing-patient-name").textContent = data.patientName;
+  document.querySelector("#briefing-patient-summary").textContent = data.patientSummary;
+  document.querySelector("#briefing-vitals-value").textContent = data.vitals;
+
+  const ul = document.querySelector("#briefing-objectives");
+  ul.innerHTML = data.objectives.map((o) => `<li>${o}</li>`).join("");
+
+  episodeBriefingEl.dataset.briefingAccent = data.accent;
+
+  const startBtn = document.querySelector("#episode-start");
+  if (startBtn) {
+    startBtn.textContent = data.locked ? "준비 중" : "이 에피소드 시작";
+    startBtn.disabled = data.locked;
+    startBtn.style.opacity = data.locked ? "0.5" : "";
+    startBtn.style.cursor = data.locked ? "default" : "";
+  }
+}
+
+function selectEpisodeCard(cardId) {
+  selectedEpisodeCard = cardId;
+  document.querySelectorAll(".episode-card").forEach((card) => {
+    card.classList.toggle("episode-card--selected", card.dataset.episodeCard === cardId);
+  });
+  renderEpisodeBriefing(cardId);
+}
 const simulationHomeEl = document.querySelector("#simulation-home");
 let contextWindowDrag = null;
 let hudClusterDrag = null;
@@ -2154,6 +2265,7 @@ function openEpisodeLobby() {
   document.body.classList.remove("title-active");
   document.body.classList.add("lobby-active");
   titleOptionsPanelEl.hidden = true;
+  selectEpisodeCard(selectedEpisodeCard || "acs");
 }
 
 function returnToTitleScreen() {
@@ -7298,10 +7410,23 @@ titleStartEl?.addEventListener("click", openEpisodeLobby);
 titleEpisodeSelectEl?.addEventListener("click", openEpisodeLobby);
 titleOptionsEl?.addEventListener("click", toggleTitleOptions);
 episodeBackHomeEl?.addEventListener("click", returnToTitleScreen);
-episodeStartEl?.addEventListener("click", () => startEpisode("acsChestPain"));
+episodeStartEl?.addEventListener("click", () => {
+  const data = episodeBriefings[selectedEpisodeCard];
+  if (data && !data.locked && data.episodeId) startEpisode(data.episodeId);
+});
 episodeStartAcsEl?.addEventListener("click", () => startEpisode("acsChestPain"));
 episodeStartWardEl?.addEventListener("click", () => startEpisode("wardWorkflow"));
 episodeStartGbsEl?.addEventListener("click", () => startEpisode("gbsRespiratory"));
+
+// Episode card selection — click on card body (not start button) updates briefing
+document.querySelectorAll(".episode-card").forEach((card) => {
+  card.addEventListener("click", (e) => {
+    if (e.target.closest(".episode-card-start")) return; // let start button handle itself
+    const cardId = card.dataset.episodeCard;
+    if (cardId) selectEpisodeCard(cardId);
+  });
+});
+
 simulationHomeEl?.addEventListener("click", returnToTitleScreen);
 
 resetGame();
