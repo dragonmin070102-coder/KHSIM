@@ -1925,7 +1925,7 @@ h1 {
   }
 
   .episode-lobby-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.6fr);
   }
 
   .app {
@@ -1941,6 +1941,17 @@ h1 {
     right: 5%;
     width: 220px;
   }
+}
+
+@media (max-width: 680px) {
+  .episode-lobby-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .episode-picker {
+    grid-template-columns: 1fr;
+  }
+}
 
 
 
